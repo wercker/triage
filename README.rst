@@ -109,6 +109,7 @@ Set up your milestones yourself, when we load we'll associate whichever
 milestone has *the nearest due date after now* as "Current"
 
 ::
+
   # show the milestones Triage recognized
   $ triage show-milestones
 
@@ -119,6 +120,7 @@ so don't mess around with milestones manually
 TODO(termie): warn if nearer date noticed when creating
 
 ::
+
   # create a new milestone in a project (due next week monday, more or less)
   $ triage create-milestone owner/repo
   # or use a due date and title

@@ -134,7 +134,7 @@ func (w *IssueWindow) RefreshIssues() error {
 			return err
 		}
 	} else {
-		rawIssues, err := w.searchIssues("is:open type:issue repo:wercker/sentcli")
+		rawIssues, err := w.searchIssues("is:open type:issue repo:wercker/sentcli repo:wercker/kiddie-pool")
 		if err != nil {
 			return err
 		}

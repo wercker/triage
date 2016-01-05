@@ -17,16 +17,16 @@ var (
 	githubFlags = []cli.Flag{
 		cli.StringFlag{Name: "api-token", Value: "", Usage: "github api token", EnvVar: "GITHUB_API_TOKEN"},
 	}
-	curseCommand = cli.Command{
-		Name:  "curse",
-		Usage: "curse info",
+	uiCommand = cli.Command{
+		Name:  "ui",
+		Usage: "go into termbox mode",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {
 				logger.Errorln("Invalid options", err)
 				os.Exit(1)
 			}
-			err = cmdCurse(opts)
+			err = cmdUI(opts)
 			if err != nil {
 				panic(err)
 			}
@@ -53,7 +53,7 @@ func AuthClient(opts *Options) *http.Client {
 	return tc
 }
 
-func cmdCurse(opts *Options) error {
+func cmdUI(opts *Options) error {
 	if err := termbox.Init(); err != nil {
 		return err
 	}
@@ -122,11 +122,13 @@ func drawAll(c *Console) {
 
 func main() {
 	app := cli.NewApp()
-	app.Author = "Team wercker"
+	app.Author = "Teamwercker"
 	app.Name = "triage"
 	app.Usage = ""
 	app.Commands = []cli.Command{
-		curseCommand,
+		uiCommand,
+		showLabelsCommand,
+		setLabelsCommand,
 	}
 	app.Run(os.Args)
 }

@@ -12,7 +12,7 @@ Quickstart::
 
   grab yourself a github api key
 
-  $ ./triage curse --api-token=<your api key>
+  $ ./triage ui --api-token=<your api key>
 
 
 What you'll see is a list of all the open issues (currently sorted by modified),you can scroll through them and note the menu options. If, for example, you hit

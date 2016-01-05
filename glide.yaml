@@ -9,4 +9,4 @@ import:
   - package: github.com/nsf/termbox-go
   - package: github.com/mitchellh/go-wordwrap
   - package: github.com/stretchr/testify/assert
-
+  - package: gopkg.in/yaml.v2

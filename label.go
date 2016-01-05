@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
@@ -76,7 +77,7 @@ func cmdShowLabels(opts *Options, project string) error {
 	return nil
 }
 
-func cmdSetLabels(opts *Options, project string) error {
+func cmdSetLabels(opts *Options, target string) error {
 	tc := AuthClient(opts)
 	client := github.NewClient(tc)
 	config, err := LoadConfig(opts)
@@ -91,38 +92,52 @@ func cmdSetLabels(opts *Options, project string) error {
 		ourLabelsMap[label.Name] = label.Color
 	}
 
-	owner, repo, err := ownerRepo(project)
-	if err != nil {
-		return err
+	var projects []string
+	if target == "all" {
+		projects = config.Projects
+	} else {
+		projects = strings.Split(target, " ")
 	}
 
-	theirLabels, _, err := client.Issues.ListLabels(owner, repo, &github.ListOptions{})
-	if err != nil {
-		return err
-	}
-	theirLabelsMap := map[string]github.Label{}
-	for _, label := range theirLabels {
-		theirLabelsMap[*label.Name] = label
-	}
+	for _, project := range projects {
+		opts.Logger.Debugln("Setting labels for:", project)
 
-	for _, ours := range ourLabels {
-		theirs, ok := theirLabelsMap[ours.Name]
-		// check if we already exist but don't have the same color
-		if ok && *theirs.Color != ours.Color {
-			// update label
-			*theirs.Color = ours.Color
-			_, _, err = client.Issues.EditLabel(owner, repo, ours.Name, &theirs)
-			if err != nil {
-				return err
-			}
-		} else if !ok {
-			_, _, err = client.Issues.CreateLabel(
-				owner,
-				repo,
-				&github.Label{Name: &ours.Name, Color: &ours.Color},
-			)
-			if err != nil {
-				return err
+		owner, repo, err := ownerRepo(project)
+		if err != nil {
+			return err
+		}
+
+		theirLabels, _, err := client.Issues.ListLabels(owner, repo, &github.ListOptions{})
+		if err != nil {
+			return err
+		}
+		theirLabelsMap := map[string]github.Label{}
+		for _, label := range theirLabels {
+			theirLabelsMap[*label.Name] = label
+		}
+
+		for _, ours := range ourLabels {
+			theirs, ok := theirLabelsMap[ours.Name]
+			// check if we already exist but don't have the same color
+			if ok && *theirs.Color != ours.Color {
+				*theirs.Color = ours.Color
+				opts.Logger.Debugln("  updating color:", ours.Name)
+				_, _, err = client.Issues.EditLabel(owner, repo, ours.Name, &theirs)
+				if err != nil {
+					return err
+				}
+			} else if !ok {
+				opts.Logger.Debugln("  creating:", ours.Name)
+				_, _, err = client.Issues.CreateLabel(
+					owner,
+					repo,
+					&github.Label{Name: &ours.Name, Color: &ours.Color},
+				)
+				if err != nil {
+					return err
+				}
+			} else {
+				opts.Logger.Debugln("  found existing:", ours.Name)
 			}
 		}
 	}

@@ -37,11 +37,21 @@ var (
 
 type Options struct {
 	APIToken string
+	Debug    bool
+	Logger   *logrus.Logger
 }
 
 func NewOptions(c *cli.Context) (*Options, error) {
+	debug := c.GlobalBool("debug")
+	logger := logrus.New()
+	if debug {
+		logger.Level = logrus.DebugLevel
+	}
+
 	return &Options{
 		APIToken: c.String("api-token"),
+		Debug:    debug,
+		Logger:   logger,
 	}, nil
 }
 
@@ -122,13 +132,17 @@ func drawAll(c *Console) {
 
 func main() {
 	app := cli.NewApp()
-	app.Author = "Teamwercker"
+	app.Author = "Team wercker"
 	app.Name = "triage"
 	app.Usage = ""
 	app.Commands = []cli.Command{
 		uiCommand,
 		showLabelsCommand,
 		setLabelsCommand,
+		showProjectsCommand,
+	}
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{Name: "debug", Usage: "output debug info"},
 	}
 	app.Run(os.Args)
 }

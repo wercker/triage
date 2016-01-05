@@ -7,12 +7,15 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type Projects []string
+
 type Label struct {
 	Name  string `yaml:"name,omitempty"`
 	Color string `yaml:"color,omitempty"`
 }
 
 type Config struct {
+	Projects   Projects
 	Priorities []Label
 	Types      []Label
 }

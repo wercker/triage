@@ -26,7 +26,6 @@ var (
 				panic(err)
 			}
 		},
-		Flags: githubFlags,
 	}
 )
 

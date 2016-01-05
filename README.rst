@@ -18,7 +18,9 @@ Quickstart::
 What you'll see is a list of all the open issues (currently sorted by modified),you can scroll through them and note the menu options. If, for example, you hit
 "m" then scroll through them you can hit "1" to mark the ones for this milestone, "2" for the next and so on
 
-Surely full of bugs, most of them might not kill you.
+Surely full of bugs, most of them might not kill you. Pretty much panics on
+anything that goes wrong with hopes that you'll figure out what's going on
+and file a patch ;)
 
 
 Some Useful Setup Helpers
@@ -47,11 +49,26 @@ Listing Labels
 --------------
 
 Pick a project with labels you like and put these under the `types`
-or `priorities` sections of your config as is appropriate::
+or `priorities` sections of your config as is appropriate and in the order
+you want to sort them in::
 
   # show the labels for a project
   $ triage show-labels owner/repo
 
+
+------------------
+Initial Milestones
+------------------
+
+Create the Next and Someday milestones across all projects, and make your first
+Current milestone::
+
+  $ triage set-milestones all
+  $ triage create-milestone all
+
+Uses a predictable scheme for randomly chosen milestone titles, so adding new
+projects to the current week should Just Work(tm) if you aren't doing anything
+weird already.
 
 
 How Labels Work
@@ -88,23 +105,41 @@ watching.
 
 For the Current milestone, you've got two options:
 
-  1. Set up your milestones yourself, when we load we'll associate whichever
-     milestone has *the nearest due date* as "Current".
-  2. Have Triage make a new milestone in each of your projects. If there is
-     a milestone with a due date sooner than that, that'll be detected instead,
-     so don't mess around with milestones manually
-     TODO(termie): warn if nearer date noticed when creating
+Set up your milestones yourself, when we load we'll associate whichever
+milestone has *the nearest due date after now* as "Current"
 
 ::
-  # for an individual project
+  # show the milestones Triage recognized
+  $ triage show-milestones
+
+
+Or, have Triage make a new milestone in each of your projects. If there is
+a milestone with a due date sooner than that, that'll be detected instead,
+so don't mess around with milestones manually
+TODO(termie): warn if nearer date noticed when creating
+
+::
+  # create a new milestone in a project (due next week monday, more or less)
+  $ triage create-milestone owner/repo
+  # or use a due date and title
+  $ triage create-milestone --due 2016-01-22 --title "I named myself" owner/repo
+
+  # or the same for all projects
+  $ triage create-milestone all
+
+  # set the next and someday milestones for an individual project
   $ triage set-milestones owner/repo
 
-  # for all projects in your config
+  # set the next and someday milestones for all projects in your config
   $ triage set-milestones all
 
 Anything that is not in either of those three detected milestones is considered
 Untriaged and will not be considered to have a milestone (and be sorted
 accordingly).
+
+If you hate all of that, I can probably add a config option to turn off
+any sort of mention of milestones and you can go be sad in your own little
+world.
 
 
 So, You Have A Way Too Many Issues

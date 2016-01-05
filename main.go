@@ -13,10 +13,7 @@ import (
 )
 
 var (
-	logger      = logrus.New()
-	githubFlags = []cli.Flag{
-		cli.StringFlag{Name: "api-token", Value: "", Usage: "github api token", EnvVar: "GITHUB_API_TOKEN"},
-	}
+	logger    = logrus.New()
 	uiCommand = cli.Command{
 		Name:  "ui",
 		Usage: "go into termbox mode",
@@ -31,7 +28,6 @@ var (
 				panic(err)
 			}
 		},
-		Flags: githubFlags,
 	}
 )
 
@@ -49,7 +45,7 @@ func NewOptions(c *cli.Context) (*Options, error) {
 	}
 
 	return &Options{
-		APIToken: c.String("api-token"),
+		APIToken: c.GlobalString("api-token"),
 		Debug:    debug,
 		Logger:   logger,
 	}, nil
@@ -140,9 +136,13 @@ func main() {
 		showLabelsCommand,
 		setLabelsCommand,
 		showProjectsCommand,
+		showMilestonesCommand,
+		setMilestonesCommand,
+		createMilestoneCommand,
 	}
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{Name: "debug", Usage: "output debug info"},
+		cli.StringFlag{Name: "api-token", Value: "", Usage: "github api token", EnvVar: "GITHUB_API_TOKEN"},
 	}
 	app.Run(os.Args)
 }

@@ -15,9 +15,11 @@ type Label struct {
 }
 
 type Config struct {
-	Projects   Projects
-	Priorities []Label
-	Types      []Label
+	NextMilestone    string `yaml:"next-milestone,omitempty"`
+	SomedayMilestone string `yaml:"someday-milestone,omitempty"`
+	Projects         Projects
+	Priorities       []Label
+	Types            []Label
 }
 
 func LoadConfig(opts *Options) (*Config, error) {

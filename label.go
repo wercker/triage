@@ -27,7 +27,6 @@ var (
 				panic(err)
 			}
 		},
-		Flags: githubFlags,
 	}
 	setLabelsCommand = cli.Command{
 		Name:  "set-labels",
@@ -44,7 +43,6 @@ var (
 				panic(err)
 			}
 		},
-		Flags: githubFlags,
 	}
 )
 

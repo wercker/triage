@@ -343,24 +343,24 @@ func (w *IssueWindow) HandlePriorityEvent(ev termbox.Event) {
 	labelNames := []string{}
 
 	for _, label := range labels {
-		if !strings.HasPrefix(*label.Name, "priority:") {
+		if !strings.HasPrefix(*label.Name, "pri:") {
 			labelNames = append(labelNames, *label.Name)
 		}
 	}
 
 	switch ev.Ch {
 	case '1':
-		// set type bug
-		labelNames = append(labelNames, "priority:blocker")
+		// set type blocker
+		labelNames = append(labelNames, "pri:blocker")
 	case '2':
-		// set type task
-		labelNames = append(labelNames, "priority:critical")
+		// set type critical
+		labelNames = append(labelNames, "pri:critical")
 	case '3':
-		// set type enhancement
-		labelNames = append(labelNames, "priority:normal")
+		// set type normal
+		labelNames = append(labelNames, "pri:normal")
 	case '4':
-		// set type question
-		labelNames = append(labelNames, "priority:low")
+		// set type low
+		labelNames = append(labelNames, "pri:low")
 	}
 
 	owner := ownerFromURL(*issue.URL)

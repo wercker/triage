@@ -4,6 +4,23 @@ Triage Really Invigorates All Github Experiences
 Triage is a small, opinionated, tool for managing your github issues for an
 organization.
 
+Quickstart::
+
+  $ glide in
+  $ glide install
+  $ go build
+
+  grab yourself a github api key
+
+  $ ./triage curse --api-token=<your api key>
+
+
+What you'll see is a list of all the open issues (currently sorted by modified),you can scroll through them and note the menu options. If, for example, you hit
+"m" then scroll through them you can hit "1" to mark the ones for this milestone, "2" for the next and so on
+
+Surely full of bugs.
+
+
 Everything that follows is a lie.
 
 ::

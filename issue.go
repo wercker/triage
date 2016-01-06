@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -12,38 +13,6 @@ import (
 	"github.com/mitchellh/go-wordwrap"
 	"github.com/nsf/termbox-go"
 )
-
-// var Priority = map[int]string{
-//   1: "pri:blocker",
-//   2: "pri:critical",
-//   3: "pri:normal",
-//   4: "pri:low",
-// }
-
-// func GetPriority(name string) int {
-//   for i, check := range Priority {
-//     if check == name {
-//       return i
-//     }
-//   }
-//   return 0
-// }
-
-// var Type = map[int]string{
-//   1: "type:bug",
-//   2: "type:task",
-//   3: "type:enhancement",
-//   4: "type:question",
-// }
-
-// func GetType(name string) int {
-//   for i, check := range Type {
-//     if check == name {
-//       return i
-//     }
-//   }
-//   return 0
-// }
 
 // Issue is the data we care about from the github.Issue, plus some of our own
 type Issue struct {
@@ -360,12 +329,6 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 			if w.currentExpanded != -1 {
 				w.currentExpanded = w.currentIndex
 			}
-			// case termbox.KeyArrowLeft:
-			//   name := *((*w.currentIssues)[w.currentIndex].Title)
-			//   w.selected[name] = struct{}{}
-			// case termbox.KeyArrowRight:
-			//   name := *((*w.currentIssues)[w.currentIndex].Title)
-			//   delete(w.selected, name)
 			return
 		case termbox.KeyF5:
 			w.RefreshIssues()
@@ -379,7 +342,7 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 			}
 			return
 		case termbox.KeyEnter:
-			if w.currentFilter == ":q" {
+			if w.currentFilter == ":q" || w.currentFilter == ":wq" {
 				termbox.Close()
 				os.Exit(0)
 			}
@@ -572,19 +535,27 @@ func (w *IssueWindow) DrawMenu() {
 	}
 
 	if w.currentMenu == "" {
-		printLine(fmt.Sprintf("[m]ilestone [p]riority [t]ype [enter] expand/contract"), w.x, w.y)
-	}
-
-	if w.currentMenu == "priority" {
-		printLine(" priority: [1] blocker [2] critical [3] normal [4] low", w.x, w.y)
-	}
-
-	if w.currentMenu == "type" {
-		printLine("     type: [1] bug [2] task [3] enhancement [4] question", w.x, w.y)
+		printLine(fmt.Sprintf("    issue: [m]ilestone [p]riority [t]ype [enter] expand/contract"), w.x, w.y+2)
 	}
 
 	if w.currentMenu == "milestone" {
-		printLine("milestone: [1] current [2] next [3] someday", w.x, w.y)
+		printLine("milestone: [1] current [2] next [3] someday", w.x, w.y+2)
+	}
+
+	if w.currentMenu == "priority" {
+		menu := " priority:"
+		for i, p := range w.priorities {
+			menu += fmt.Sprintf(" [%d] %s", i+1, p.Name)
+		}
+		printLine(menu, w.x, w.y+2)
+	}
+
+	if w.currentMenu == "type" {
+		menu := "     type:"
+		for i, p := range w.types {
+			menu += fmt.Sprintf(" [%d] %s", i+1, p.Name)
+		}
+		printLine(menu, w.x, w.y+2)
 	}
 
 }
@@ -595,10 +566,10 @@ func (w *IssueWindow) DrawFilter() {
 		cursor = ">"
 	}
 	if w.currentFilter == "" && w.currentIndex == -1 {
-		printLine(">filter: (type anything to start filtering, down-arrow to select issue)", w.x, w.y+1)
+		printLine(" > filter: (type anything to start filtering, down-arrow to select issue)", w.x, w.y+3)
 		return
 	}
-	printLine(fmt.Sprintf("%sfilter: %s", cursor, w.currentFilter), w.x, w.y+1)
+	printLine(fmt.Sprintf(" %s filter: %s", cursor, w.currentFilter), w.x, w.y+3)
 }
 
 func (w *IssueWindow) Draw() {
@@ -607,6 +578,7 @@ func (w *IssueWindow) Draw() {
 	w.DrawFilter()
 
 	w.Filter(w.currentFilter)
+	sort.Sort(w)
 	y := 0
 
 	//debug
@@ -614,7 +586,7 @@ func (w *IssueWindow) Draw() {
 
 	if w.scrollIndex > 0 {
 		y += 1
-		printLine("--more--", w.x, 3+y)
+		printLine("--more--", w.x+3, 3+y)
 	}
 
 	for i, issue := range w.currentIssues {
@@ -625,7 +597,7 @@ func (w *IssueWindow) Draw() {
 		// we've reached the edge
 		if y >= w.y2-4 {
 			if i < len(w.currentIssues) {
-				printLine("--more--", w.x, w.y2-1)
+				printLine("--more--", w.x+3, w.y2-1)
 			}
 			break
 		}
@@ -644,7 +616,7 @@ func (w *IssueWindow) Draw() {
 			issue.Repo[:5],
 			issue.Number,
 			issue.Title,
-		), w.x, 3+y)
+		), w.x+2, 3+y)
 
 		// Check for expanded
 		if i == w.currentExpanded {
@@ -666,5 +638,34 @@ func (w *IssueWindow) Swap(i, j int) {
 }
 
 func (w *IssueWindow) Less(i, j int) bool {
-	return w.currentIssues[i].Title < w.currentIssues[j].Title
+	return TriageSortLess(w.currentIssues[i], w.currentIssues[j])
+}
+
+// TriageSort sorts in order of:
+// 1. Anything with Priority 1
+// 2. By TriageNumber (MilestonePriorityType)
+func TriageSortLess(i, j *Issue) bool {
+	iNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", i.Milestone.Index, i.Priority.Index, i.Type.Index))
+	jNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", j.Milestone.Index, j.Priority.Index, j.Type.Index))
+	iPri := i.Priority.Index
+	jPri := j.Priority.Index
+
+	// tiebreaker
+	if iNumber == jNumber {
+		iNumber += i.Number
+		jNumber += j.Number
+	}
+
+	if iPri == 1 {
+		if jPri != 1 {
+			return true
+		} else {
+			return iNumber < jNumber
+		}
+	} else if jPri == 1 {
+		// we already know iPri is not 1
+		return false
+	} else {
+		return iNumber < jNumber
+	}
 }

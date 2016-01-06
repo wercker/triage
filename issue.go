@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/google/go-github/github"
@@ -12,52 +13,88 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
-var Priority = map[int]string{
-	1: "pri:blocker",
-	2: "pri:critical",
-	3: "pri:normal",
-	4: "pri:low",
+// var Priority = map[int]string{
+//   1: "pri:blocker",
+//   2: "pri:critical",
+//   3: "pri:normal",
+//   4: "pri:low",
+// }
+
+// func GetPriority(name string) int {
+//   for i, check := range Priority {
+//     if check == name {
+//       return i
+//     }
+//   }
+//   return 0
+// }
+
+// var Type = map[int]string{
+//   1: "type:bug",
+//   2: "type:task",
+//   3: "type:enhancement",
+//   4: "type:question",
+// }
+
+// func GetType(name string) int {
+//   for i, check := range Type {
+//     if check == name {
+//       return i
+//     }
+//   }
+//   return 0
+// }
+
+// Issue is the data we care about from the github.Issue, plus some of our own
+type Issue struct {
+	Milestone *IssueMilestone
+	Priority  *IssuePriority
+	Type      *IssueType
+	Number    int
+	Title     string
+	Body      string
+	URL       string
+	Owner     string
+	Repo      string
+	Project   string
+	Labels    []string
 }
 
-func GetPriority(name string) int {
-	for i, check := range Priority {
-		if check == name {
-			return i
-		}
-	}
-	return 0
+type IssueMilestone struct {
+	Index int
+	*Milestone
 }
 
-var Type = map[int]string{
-	1: "type:bug",
-	2: "type:task",
-	3: "type:enhancement",
-	4: "type:question",
+type IssuePriority struct {
+	Index int
+	*Priority
 }
 
-func GetType(name string) int {
-	for i, check := range Type {
-		if check == name {
-			return i
-		}
-	}
-	return 0
+type IssueType struct {
+	Index int
+	*Type
 }
 
 type IssueWindow struct {
 	client *github.Client
-	issues []*github.Issue
+	opts   *Options
+	config *Config
+	api    API
+	target string
+	issues []*Issue
 	// selected      map[string]struct{}
 	// selectedRepos []github.Issues
 	currentIndex    int
 	lastIndex       int
 	currentExpanded int
-	currentIssues   []*github.Issue
+	currentIssues   []*Issue
 	currentFilter   string
 	currentMenu     string
 	scrollIndex     int
 	// Milestones are weird
-	milestones map[int]int
+	milestones map[string][]*Milestone
+	priorities []Priority
+	types      []Type
 
 	// currentMode   string
 	x  int
@@ -66,17 +103,135 @@ type IssueWindow struct {
 	y2 int
 }
 
-func NewIssueWindow(client *github.Client) *IssueWindow {
-	return &IssueWindow{
-		client: client,
-		// selected:     map[string]struct{}{},
-		currentIndex:    -1,
-		currentExpanded: -1,
+func NewIssue(issue github.Issue, ms map[string][]*Milestone, ps []Priority, ts []Type) *Issue {
+	number := *issue.Number
+	title := *issue.Title
+	body := *issue.Body
+	url := *issue.URL
+	owner, repo, _ := ownerRepoFromURL(url)
+	project := fmt.Sprintf("%s/%s", owner, repo)
+
+	var issueMilestone IssueMilestone
+	var issuePriority IssuePriority
+	var issueType IssueType
+
+	// figure out the milestone based on milestone number
+	issueMilestone = IssueMilestone{Index: 0}
+	if issue.Milestone != nil {
+		mNumber := *issue.Milestone.Number
+		if ourMs := ms[project]; ourMs != nil {
+			for i, m := range ourMs {
+				if m.Number == mNumber {
+					issueMilestone = IssueMilestone{Index: i + 1, Milestone: m}
+				}
+			}
+		}
+	}
+
+	// figure out the priority based on label name
+	issuePriority = IssuePriority{Index: 0}
+	for i, p := range ps {
+		for _, l := range issue.Labels {
+			if p.Name == *l.Name {
+				issuePriority = IssuePriority{Index: i + 1, Priority: &p}
+				break
+			}
+		}
+	}
+
+	// figure out the type based on label name
+	issueType = IssueType{Index: 0}
+	for i, t := range ts {
+		for _, l := range issue.Labels {
+			if t.Name == *l.Name {
+				issueType = IssueType{Index: i + 1, Type: &t}
+				break
+			}
+		}
+	}
+
+	// set the labels
+	labels := []string{}
+	for _, label := range issue.Labels {
+		labels = append(labels, *label.Name)
+	}
+
+	return &Issue{
+		Milestone: &issueMilestone,
+		Priority:  &issuePriority,
+		Type:      &issueType,
+		Number:    number,
+		Title:     title,
+		Body:      body,
+		URL:       url,
+		Owner:     owner,
+		Repo:      repo,
+		Project:   project,
+		Labels:    labels,
 	}
 }
 
-func (w *IssueWindow) ID() string {
-	return "issues"
+func (a *GithubAPI) Search(query string) ([]github.Issue, error) {
+	result, _, err := a.client.Search.Issues(query,
+		&github.SearchOptions{
+			Order:       "updated",
+			ListOptions: github.ListOptions{PerPage: 1000},
+		})
+	if err != nil {
+		return nil, err
+	}
+	return result.Issues, nil
+
+}
+
+func NewIssueWindow(client *github.Client, opts *Options, config *Config, api API, target string) *IssueWindow {
+	return &IssueWindow{
+		client:          client,
+		opts:            opts,
+		config:          config,
+		api:             api,
+		currentIndex:    -1,
+		currentExpanded: -1,
+		target:          target,
+	}
+}
+
+func (w *IssueWindow) Init() error {
+	// build our search string
+	target := "is:open is:issue"
+	if w.target == "" {
+		if len(w.config.Projects) > 0 {
+			for _, project := range w.config.Projects {
+				target += fmt.Sprintf(" repo:%s", project)
+			}
+		}
+	} else {
+		target += w.target
+	}
+	w.target = target
+
+	// get our milestones
+	milestones := map[string][]*Milestone{}
+	for _, project := range w.config.Projects {
+		resp, err := w.api.Milestones(project)
+		if err == nil {
+			// NOTE(termie): ignoring this error in case people don't use milestones
+			//               code later on down the line should fail gracefully if
+			//               a milestone operation is attempted
+			milestones[project] = resp
+		}
+	}
+	w.milestones = milestones
+	w.priorities = w.config.Priorities
+	w.types = w.config.Types
+
+	err := w.RefreshIssues()
+	if err != nil {
+		return err
+	}
+
+	// sort.Sort(w)
+	return nil
 }
 
 func (w *IssueWindow) SetBounds(x1, y1, x2, y2 int) {
@@ -86,68 +241,23 @@ func (w *IssueWindow) SetBounds(x1, y1, x2, y2 int) {
 	w.y2 = y2
 }
 
-func (w *IssueWindow) searchIssues(query string) ([]github.Issue, error) {
-	var issues []github.Issue
-	var err error
-	if query == "" {
-		issues, _, err = w.client.Issues.ListByOrg(
-			"wercker",
-			&github.IssueListOptions{},
-		)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		result, _, err := w.client.Search.Issues(query,
-			&github.SearchOptions{
-				Order:       "updated",
-				ListOptions: github.ListOptions{PerPage: 1000},
-			})
-		if err != nil {
-			return nil, err
-		}
-		issues = result.Issues
-	}
-	return issues, nil
-}
-
 func (w *IssueWindow) RefreshIssues() error {
-	var issues []*github.Issue
-	var err error
-	cached, err := exists("fake_issues.json")
+	rawIssues, err := w.api.Search(w.target)
 	if err != nil {
 		return err
 	}
-	if cached && false {
-		f, err := os.Open("fake_issues.json")
-		if err != nil {
-			return err
-		}
 
-		data, err := ioutil.ReadAll(f)
-		if err != nil {
-			return err
-		}
+	issues := []*Issue{}
+	for _, issue := range rawIssues {
+		issues = append(issues, NewIssue(issue, w.milestones, w.priorities, w.types))
+	}
 
-		err = json.Unmarshal(data, &issues)
+	if w.opts.Debug {
+		data, err := json.MarshalIndent(rawIssues, "", "  ")
 		if err != nil {
 			return err
 		}
-	} else {
-		rawIssues, err := w.searchIssues("is:open type:issue repo:wercker/sentcli repo:wercker/kiddie-pool")
-		if err != nil {
-			return err
-		}
-		for _, issue := range rawIssues {
-			boom := issue
-			issues = append(issues, &boom)
-		}
-
-		data, err := json.MarshalIndent(issues, "", "  ")
-		if err != nil {
-			return err
-		}
-		err = ioutil.WriteFile("fake_issues.json", data, 0666)
+		err = ioutil.WriteFile("raw_issues.json", data, 0666)
 		if err != nil {
 			return err
 		}
@@ -158,36 +268,18 @@ func (w *IssueWindow) RefreshIssues() error {
 	return nil
 }
 
-func (w *IssueWindow) Init() error {
-	err := w.RefreshIssues()
-	if err != nil {
-		return err
-	}
-
-	// Fake milestones for now
-	w.milestones = map[int]int{
-		1: 3,
-		2: 1,
-		3: 2,
-	}
-
-	// sort.Sort(w)
-	return nil
-}
-
 func (w *IssueWindow) Filter(substr string) {
 	if substr == "" {
 		w.currentIssues = w.issues
 		return
 	}
-	selected := []*github.Issue{}
+	selected := []*Issue{}
 	for _, issue := range w.issues {
-		repo := repoFromURL(*issue.URL)
-		if strings.Contains(strings.ToLower(*issue.Title), strings.ToLower(substr)) {
+		if strings.Contains(strings.ToLower(issue.Title), strings.ToLower(substr)) {
 			selected = append(selected, issue)
-		} else if strings.Contains(strings.ToLower(repo), strings.ToLower(substr)) {
+		} else if strings.Contains(strings.ToLower(issue.Repo), strings.ToLower(substr)) {
 			selected = append(selected, issue)
-		} else if strings.Contains(substr, fmt.Sprintf("#%d", *issue.Number)) {
+		} else if strings.Contains(substr, fmt.Sprintf("#%d", issue.Number)) {
 			selected = append(selected, issue)
 		}
 	}
@@ -207,16 +299,13 @@ func (w *IssueWindow) Scroll(i int) {
 	}
 }
 
-// HandleEvent for keypresses
-// up/down: move the cursor
-// a: show all issues
-// b: show selected
-// left/right: unselect/select
 func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
 		case termbox.KeyEsc:
+			fallthrough
+		case termbox.KeyArrowLeft:
 			// back out of stuff
 			if w.currentMenu != "" {
 				w.currentMenu = ""
@@ -339,112 +428,132 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 
 func (w *IssueWindow) HandlePriorityEvent(ev termbox.Event) {
 	issue := w.currentIssues[w.currentIndex]
-	labels := issue.Labels
-	labelNames := []string{}
+	labels := []string{}
 
-	for _, label := range labels {
-		if !strings.HasPrefix(*label.Name, "pri:") {
-			labelNames = append(labelNames, *label.Name)
+	// filter out any label that means a priority
+	for _, label := range issue.Labels {
+		found := false
+		for _, ours := range w.priorities {
+			if label == ours.Name {
+				found = true
+			}
+		}
+		if !found {
+			labels = append(labels, label)
 		}
 	}
 
-	switch ev.Ch {
-	case '1':
-		// set type blocker
-		labelNames = append(labelNames, "pri:blocker")
-	case '2':
-		// set type critical
-		labelNames = append(labelNames, "pri:critical")
-	case '3':
-		// set type normal
-		labelNames = append(labelNames, "pri:normal")
-	case '4':
-		// set type low
-		labelNames = append(labelNames, "pri:low")
+	// now attempt to grab our label via the index keyed in
+	i, err := strconv.Atoi(fmt.Sprintf("%c", ev.Ch))
+	if err != nil {
+		// TODO(termie): warning
+		return
 	}
 
-	owner := ownerFromURL(*issue.URL)
-	repo := repoFromURL(*issue.URL)
-	newLabels, _, err := w.client.Issues.ReplaceLabelsForIssue(owner, repo, *issue.Number, labelNames)
+	if i > len(w.priorities) {
+		// TODO(termie): warning
+		return
+	}
+	var issuePriority IssuePriority
+	// a "0" will delete the label
+	if i > 0 {
+		pri := w.priorities[i-1]
+		issuePriority = IssuePriority{Index: i, Priority: &pri}
+		labels = append(labels, pri.Name)
+	} else {
+		issuePriority = IssuePriority{Index: 0}
+	}
+
+	_, _, err = w.client.Issues.ReplaceLabelsForIssue(issue.Owner, issue.Repo, issue.Number, labels)
 	if err != nil {
 		panic(err)
 	}
-	updateIssue := w.FindIssue(*issue.Number)
-	updateIssue.Labels = newLabels
+	issue.Priority = &issuePriority
+	issue.Labels = labels
 }
 
 func (w *IssueWindow) HandleTypeEvent(ev termbox.Event) {
 	issue := w.currentIssues[w.currentIndex]
-	labels := issue.Labels
-	labelNames := []string{}
+	labels := []string{}
 
-	for _, label := range labels {
-		if !strings.HasPrefix(*label.Name, "type:") {
-			labelNames = append(labelNames, *label.Name)
+	// filter out any label that means a priority
+	for _, label := range issue.Labels {
+		found := false
+		for _, ours := range w.types {
+			if label == ours.Name {
+				found = true
+			}
+		}
+		if !found {
+			labels = append(labels, label)
 		}
 	}
 
-	switch ev.Ch {
-	case '1':
-		// set type bug
-		labelNames = append(labelNames, "type:bug")
-	case '2':
-		// set type task
-		labelNames = append(labelNames, "type:task")
-	case '3':
-		// set type enhancement
-		labelNames = append(labelNames, "type:enhancement")
-	case '4':
-		// set type question
-		labelNames = append(labelNames, "type:question")
+	// now attempt to grab our label via the index keyed in
+	i, err := strconv.Atoi(fmt.Sprintf("%c", ev.Ch))
+	if err != nil {
+		// TODO(termie): warning
+		return
 	}
 
-	owner := ownerFromURL(*issue.URL)
-	repo := repoFromURL(*issue.URL)
-	newLabels, _, err := w.client.Issues.ReplaceLabelsForIssue(owner, repo, *issue.Number, labelNames)
+	if i > len(w.priorities) {
+		// TODO(termie): warning
+		return
+	}
+	// a "0" will delete the label
+	var issueType IssueType
+	// a "0" will delete the label
+	if i > 0 {
+		t := w.types[i-1]
+		issueType = IssueType{Index: i, Type: &t}
+		labels = append(labels, t.Name)
+	} else {
+		issueType = IssueType{Index: 0}
+	}
+
+	_, _, err = w.client.Issues.ReplaceLabelsForIssue(issue.Owner, issue.Repo, issue.Number, labels)
 	if err != nil {
 		panic(err)
 	}
-	updateIssue := w.FindIssue(*issue.Number)
-	updateIssue.Labels = newLabels
-}
-
-func (w *IssueWindow) FindIssue(number int) *github.Issue {
-	for _, issue := range w.issues {
-		if *issue.Number == number {
-			return issue
-		}
-	}
-	return nil
+	issue.Type = &issueType
+	issue.Labels = labels
 }
 
 func (w *IssueWindow) HandleMilestoneEvent(ev termbox.Event) {
 	issue := w.currentIssues[w.currentIndex]
-	owner := ownerFromURL(*issue.URL)
-	repo := repoFromURL(*issue.URL)
-	number := *issue.Number
-	var milestone int
+	milestones := w.milestones[issue.Project]
+	if milestones == nil {
+		// TODO(termie): display error/warning
+		return
+	}
+
+	var milestone *Milestone
+	var index int
 	switch ev.Ch {
 	case '1':
 		// set current milestone
-		milestone = w.milestones[1]
+		index = 1
+		milestone = milestones[0]
 	case '2':
 		// set next milestone
-		milestone = w.milestones[2]
+		index = 2
+		milestone = milestones[1]
+
 	case '3':
 		// set someday milestone
-		milestone = w.milestones[3]
+		index = 3
+		milestone = milestones[2]
+
 	default:
 		return
 	}
 
-	respIssue, _, err := w.client.Issues.Edit(owner, repo, number, &github.IssueRequest{Milestone: &milestone})
+	_, _, err := w.client.Issues.Edit(issue.Owner, issue.Repo, issue.Number, &github.IssueRequest{Milestone: &milestone.Number})
 	if err != nil {
 		panic(err)
 	}
 
-	updateIssue := w.FindIssue(number)
-	updateIssue.Milestone = respIssue.Milestone
+	issue.Milestone = &IssueMilestone{Index: index, Milestone: milestone}
 
 }
 
@@ -453,64 +562,8 @@ func wordWrap(text string, length int) []string {
 	return strings.Split(s, "\n")
 }
 
-func repoFromURL(url string) string {
-	parts := strings.Split(url, "/")
-	return parts[len(parts)-3]
-}
-
-func ownerFromURL(url string) string {
-	parts := strings.Split(url, "/")
-	return parts[len(parts)-4]
-}
-
-func issuePriority(issue *github.Issue) int {
-	for _, label := range issue.Labels {
-		pri := GetPriority(*label.Name)
-		if pri != 0 {
-			return pri
-		}
-	}
-	return 0
-}
-
-func issueType(issue *github.Issue) int {
-	for _, label := range issue.Labels {
-		t := GetType(*label.Name)
-		if t != 0 {
-			return t
-		}
-	}
-	return 0
-}
-
-func (w *IssueWindow) issueMilestone(issue *github.Issue) int {
-	if issue.Milestone == nil {
-		return 0
-	}
-	return w.GetMilestone(*issue.Milestone.URL)
-}
-
-func (w *IssueWindow) GetMilestone(url string) int {
-	parts := strings.Split(url, "/")
-	milestone := parts[len(parts)-1]
-	for i, check := range w.milestones {
-		if fmt.Sprintf("%d", check) == milestone {
-			return i
-		}
-	}
-	return 0
-}
-
-func (w *IssueWindow) DrawFilter() {
-	cursor := " "
-	if w.currentIndex == -1 {
-		cursor = ">"
-	}
-	if w.currentFilter == "" && w.currentIndex == -1 {
-		printLine(">filter: (type anything to start filtering, down-arrow to select issue)", w.x, w.y+1)
-		return
-	}
-	printLine(fmt.Sprintf("%sfilter: %s", cursor, w.currentFilter), w.x, w.y+1)
+func (w *IssueWindow) DrawHeader() {
+	printLine(fmt.Sprintf("[triage] %s", w.target), w.x, w.y)
 }
 
 func (w *IssueWindow) DrawMenu() {
@@ -536,10 +589,24 @@ func (w *IssueWindow) DrawMenu() {
 
 }
 
+func (w *IssueWindow) DrawFilter() {
+	cursor := " "
+	if w.currentIndex == -1 {
+		cursor = ">"
+	}
+	if w.currentFilter == "" && w.currentIndex == -1 {
+		printLine(">filter: (type anything to start filtering, down-arrow to select issue)", w.x, w.y+1)
+		return
+	}
+	printLine(fmt.Sprintf("%sfilter: %s", cursor, w.currentFilter), w.x, w.y+1)
+}
+
 func (w *IssueWindow) Draw() {
-	w.Filter(w.currentFilter)
+	w.DrawHeader()
 	w.DrawMenu()
 	w.DrawFilter()
+
+	w.Filter(w.currentFilter)
 	y := 0
 
 	//debug
@@ -563,25 +630,25 @@ func (w *IssueWindow) Draw() {
 			break
 		}
 		cursor := " "
-		selected := " "
 		if i == w.currentIndex {
 			cursor = ">"
 		}
 		w.lastIndex = i
-		// if _, ok := w.selected[*issue.Title]; ok {
-		//   selected = "*"
-		// }
 
-		repo := repoFromURL(*issue.URL)[:5]
-		pri := issuePriority(issue)
-		t := issueType(issue)
-		milestone := w.issueMilestone(issue)
-
-		printLine(fmt.Sprintf("%s %d%d%d %s%s/%-4d %s", cursor, milestone, pri, t, selected, repo, *issue.Number, *issue.Title), w.x, 3+y)
+		printLine(fmt.Sprintf(
+			"%s %d%d%d %s/%-4d %s",
+			cursor,
+			issue.Milestone.Index,
+			issue.Priority.Index,
+			issue.Type.Index,
+			issue.Repo[:5],
+			issue.Number,
+			issue.Title,
+		), w.x, 3+y)
 
 		// Check for expanded
 		if i == w.currentExpanded {
-			lines := wordWrap(*issue.Body, w.x2-9)
+			lines := wordWrap(issue.Body, w.x2-9)
 			for _, line := range lines {
 				y += 1
 				printLine(line, 8, 3+y)
@@ -599,5 +666,5 @@ func (w *IssueWindow) Swap(i, j int) {
 }
 
 func (w *IssueWindow) Less(i, j int) bool {
-	return *(w.currentIssues[i].Title) < *(w.currentIssues[j].Title)
+	return w.currentIssues[i].Title < w.currentIssues[j].Title
 }

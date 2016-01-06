@@ -23,7 +23,8 @@ var (
 				logger.Errorln("Invalid options", err)
 				os.Exit(1)
 			}
-			err = cmdUI(opts)
+			target := c.Args().First()
+			err = cmdUI(opts, target)
 			if err != nil {
 				panic(err)
 			}
@@ -59,7 +60,7 @@ func AuthClient(opts *Options) *http.Client {
 	return tc
 }
 
-func cmdUI(opts *Options) error {
+func cmdUI(opts *Options, target string) error {
 	if err := termbox.Init(); err != nil {
 		return err
 	}
@@ -67,19 +68,17 @@ func cmdUI(opts *Options) error {
 
 	tc := AuthClient(opts)
 	client := github.NewClient(tc)
-
+	config, err := LoadConfig(opts)
+	if err != nil {
+		return err
+	}
+	api := NewGithubAPI(client, opts, config)
 	c := NewConsole(client)
 	if err := c.Init(); err != nil {
 		return err
 	}
 
-	// repoWindow := NewRepoWindow(client)
-	// if err := repoWindow.Init(); err != nil {
-	//   return err
-	// }
-	// c.AddWindow(repoWindow)
-
-	issueWindow := NewIssueWindow(client)
+	issueWindow := NewIssueWindow(client, opts, config, api, target)
 	if err := issueWindow.Init(); err != nil {
 		return err
 	}

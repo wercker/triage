@@ -3,7 +3,8 @@ package main
 import "github.com/google/go-github/github"
 
 type API interface {
-	Milestones(string) ([]Milestone, error)
+	Milestones(string) ([]*Milestone, error)
+	Search(string) ([]github.Issue, error)
 }
 
 type GithubAPI struct {

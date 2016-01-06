@@ -83,8 +83,14 @@ func cmdSetLabels(opts *Options, target string) error {
 		return err
 	}
 
-	ourLabels := config.Priorities
-	ourLabels = append(ourLabels, config.Types...)
+	ourLabels := []Label{}
+	for _, p := range config.Priorities {
+		ourLabels = append(ourLabels, Label(p))
+	}
+	for _, t := range config.Types {
+		ourLabels = append(ourLabels, Label(t))
+	}
+
 	ourLabelsMap := map[string]string{}
 	for _, label := range ourLabels {
 		ourLabelsMap[label.Name] = label.Color

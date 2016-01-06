@@ -14,12 +14,15 @@ type Label struct {
 	Color string `yaml:"color,omitempty"`
 }
 
+type Priority Label
+type Type Label
+
 type Config struct {
 	NextMilestone    string `yaml:"next-milestone,omitempty"`
 	SomedayMilestone string `yaml:"someday-milestone,omitempty"`
 	Projects         Projects
-	Priorities       []Label
-	Types            []Label
+	Priorities       []Priority
+	Types            []Type
 }
 
 func LoadConfig(opts *Options) (*Config, error) {

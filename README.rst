@@ -152,7 +152,10 @@ it is looking at as long as the setup of the project matches your expected
 config. Towards that end, you can pretty much put any search query you want
 in as the starting point for it::
 
-  $ triage ui "is:open is:issue repo:owner/repo"
+  # "is:open is:issue" is currently implied
+  $ triage ui "repo:owner/repo searchstring"
+
+
 
 Github Search will only give you up to 1000 results, so if you've got a ton
 more than that you're going to want to make specific triage calls.

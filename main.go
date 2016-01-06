@@ -127,7 +127,7 @@ func drawAll(c *Console) {
 
 func main() {
 	app := cli.NewApp()
-	app.Author = "Team wercker"
+	app.Author = "termie"
 	app.Name = "triage"
 	app.Usage = ""
 	app.Commands = []cli.Command{

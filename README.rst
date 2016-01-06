@@ -66,9 +66,30 @@ In ascending order, it will show:
 Caveat Emptor
 -------------
 
+::
+
+  THIS...IS...ALLLLPPPHAAAA!
+  .. O
+  .. /I_
+  .. /
+  [][][][][] ... >-/-O....... [][][][]
+  [][][][][] ................ [][][][]
+  [][][][][] ................ [][][][]
+
+
 Surely full of bugs, most of them might not kill you. Pretty much panics on
 anything that goes wrong with hopes that you'll figure out what's going on
 and file a patch ;)
+
+Some known issues:
+
+ - milestone actions silently fail if you don't have the milestone system setup
+   (see "Initial Milestones" below).
+ - if, for example, a repo can't be found you'll get a panic.
+ - you can't scroll through body text, it's just there to remind you of the
+   issue (follow the link for more).
+ - despite running a company dedicated to build and testing, I did not
+   write tests for this, termbox + testing = my brain a splode.
 
 
 Some Useful Setup Helpers
@@ -91,6 +112,8 @@ you don't want::
   # show all the projects for an org you have access to
   $ triage show-projects some_org
 
+There may be some github limit on number of projects that can be part of your
+search query, if so see "So, You Have A Way Too Many Issues" below
 
 --------------
 Listing Labels

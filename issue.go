@@ -29,50 +29,25 @@ type Issue struct {
 	Labels    []string
 }
 
+// IssueMilestone sortable milestone
 type IssueMilestone struct {
 	Index int
 	*Milestone
 }
 
+// IssuePriority sortable priority
 type IssuePriority struct {
 	Index int
 	*Priority
 }
 
+// IssueType sortable type
 type IssueType struct {
 	Index int
 	*Type
 }
 
-type IssueWindow struct {
-	client *github.Client
-	opts   *Options
-	config *Config
-	api    API
-	target string
-	issues []*Issue
-	// selected      map[string]struct{}
-	// selectedRepos []github.Issues
-	currentIndex    int
-	lastIndex       int
-	currentIssues   []*Issue
-	currentFilter   string
-	currentMenu     string
-	scrollIndex     int
-	enableSorting   bool
-	enableExpanding bool
-	// Milestones are weird
-	milestones map[string][]*Milestone
-	priorities []Priority
-	types      []Type
-
-	// currentMode   string
-	x  int
-	y  int
-	x2 int
-	y2 int
-}
-
+// NewIssue constructor for an Issue from a github.Issue
 func NewIssue(issue github.Issue, ms map[string][]*Milestone, ps []Priority, ts []Type) *Issue {
 	number := *issue.Number
 	title := *issue.Title
@@ -141,6 +116,7 @@ func NewIssue(issue github.Issue, ms map[string][]*Milestone, ps []Priority, ts 
 	}
 }
 
+// Search uses the Github search API
 func (a *GithubAPI) Search(query string) ([]github.Issue, error) {
 	result, _, err := a.client.Search.Issues(query,
 		&github.SearchOptions{
@@ -154,6 +130,37 @@ func (a *GithubAPI) Search(query string) ([]github.Issue, error) {
 
 }
 
+// IssueWindow is the main window for the issue management
+type IssueWindow struct {
+	client *github.Client
+	opts   *Options
+	config *Config
+	api    API
+	target string
+	issues []*Issue
+	// selected      map[string]struct{}
+	// selectedRepos []github.Issues
+	currentIndex    int
+	lastIndex       int
+	currentIssues   []*Issue
+	currentFilter   string
+	currentMenu     string
+	scrollIndex     int
+	enableSorting   bool
+	enableExpanding bool
+	// Milestones are weird
+	milestones map[string][]*Milestone
+	priorities []Priority
+	types      []Type
+
+	// currentMode   string
+	x  int
+	y  int
+	x2 int
+	y2 int
+}
+
+// NewIssueWindow constructor
 func NewIssueWindow(client *github.Client, opts *Options, config *Config, api API, target string) *IssueWindow {
 	return &IssueWindow{
 		client:          client,
@@ -167,6 +174,7 @@ func NewIssueWindow(client *github.Client, opts *Options, config *Config, api AP
 	}
 }
 
+// Init setup initial window state
 func (w *IssueWindow) Init() error {
 	// build our search string
 	target := "is:open is:issue"
@@ -205,6 +213,7 @@ func (w *IssueWindow) Init() error {
 	return nil
 }
 
+// SetBounds to manage window size
 func (w *IssueWindow) SetBounds(x1, y1, x2, y2 int) {
 	w.x = x1
 	w.y = y1
@@ -212,6 +221,7 @@ func (w *IssueWindow) SetBounds(x1, y1, x2, y2 int) {
 	w.y2 = y2
 }
 
+// RefreshIssues updates all the issues for the current query
 func (w *IssueWindow) RefreshIssues() error {
 	rawIssues, err := w.api.Search(w.target)
 	if err != nil {
@@ -239,24 +249,42 @@ func (w *IssueWindow) RefreshIssues() error {
 	return nil
 }
 
+// Filter the issues based on substring
 func (w *IssueWindow) Filter(substr string) {
 	if substr == "" {
 		w.currentIssues = w.issues
 		return
 	}
+
+	parts := strings.Split(substr, " ")
+
 	selected := []*Issue{}
+
+	IssueLoop:
 	for _, issue := range w.issues {
-		if strings.Contains(strings.ToLower(issue.Title), strings.ToLower(substr)) {
-			selected = append(selected, issue)
-		} else if strings.Contains(strings.ToLower(issue.Repo), strings.ToLower(substr)) {
-			selected = append(selected, issue)
-		} else if strings.Contains(substr, fmt.Sprintf("#%d", issue.Number)) {
-			selected = append(selected, issue)
+		haystack := fmt.Sprintf("%s %s", issue.Title, issue.Repo)
+		for _, label := range issue.Labels {
+			haystack += fmt.Sprintf(" %s", label)
 		}
+		haystack = strings.ToLower(haystack)
+
+		for _, search := range parts {
+			if strings.Contains(haystack, strings.ToLower(search)) {
+				// selected = append(selected, issue)
+			} else if strings.Contains(substr, fmt.Sprintf("#%d", issue.Number)) {
+				// selected = append(selected, issue)
+			} else {
+				// If we failed a match, skip to the next issue
+				continue IssueLoop
+			}
+		}
+		// if we got here we matched
+		selected = append(selected, issue)
 	}
 	w.currentIssues = selected
 }
 
+// Scroll moves the dang window contents around
 func (w *IssueWindow) Scroll(i int) {
 	w.scrollIndex += i
 	if w.scrollIndex > len(w.currentIssues) {
@@ -270,6 +298,7 @@ func (w *IssueWindow) Scroll(i int) {
 	}
 }
 
+// HandleEvent is the entry point into key presses
 func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -298,7 +327,7 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 			return
 		case termbox.KeyArrowDown:
 			// move down and maintain expandededness
-			w.currentIndex += 1
+			w.currentIndex++
 			if w.currentIndex >= len(w.currentIssues) {
 				w.currentIndex = len(w.currentIssues) - 1
 			}
@@ -320,7 +349,7 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 			}
 
 			// move up and maintain expandededness
-			w.currentIndex -= 1
+			w.currentIndex--
 			return
 		case termbox.KeyF2:
 			w.enableSorting = !w.enableSorting
@@ -346,13 +375,19 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 
 		if w.currentIndex == -1 {
 			// Add to the filter if we have nothing selected
-			switch ev.Ch {
-			case 0:
-			case ' ':
-			default:
-				w.currentFilter += string(ev.Ch)
-				// reset scrollidex
+			switch ev.Key {
+			case termbox.KeySpace:
+				w.currentFilter += " "
 				w.scrollIndex = 0
+			default:
+				switch ev.Ch {
+				case 0:
+				case ' ':
+				default:
+					w.currentFilter += string(ev.Ch)
+					// reset scrollidex
+					w.scrollIndex = 0
+				}
 			}
 		} else {
 			// Try to find the menu item
@@ -381,6 +416,7 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 	}
 }
 
+// HandlePriorityEvent is the entrypoint into the priority submenu
 func (w *IssueWindow) HandlePriorityEvent(ev termbox.Event) {
 	issue := w.currentIssues[w.currentIndex]
 	labels := []string{}
@@ -427,6 +463,7 @@ func (w *IssueWindow) HandlePriorityEvent(ev termbox.Event) {
 	issue.Labels = labels
 }
 
+// HandleTypeEvent is the entrypoint into the type submenu
 func (w *IssueWindow) HandleTypeEvent(ev termbox.Event) {
 	issue := w.currentIssues[w.currentIndex]
 	labels := []string{}
@@ -474,6 +511,7 @@ func (w *IssueWindow) HandleTypeEvent(ev termbox.Event) {
 	issue.Labels = labels
 }
 
+// HandleMilestoneEvent is the entrypoint into the milestone submenu
 func (w *IssueWindow) HandleMilestoneEvent(ev termbox.Event) {
 	issue := w.currentIssues[w.currentIndex]
 	milestones := w.milestones[issue.Project]
@@ -517,10 +555,12 @@ func wordWrap(text string, length int) []string {
 	return strings.Split(s, "\n")
 }
 
+// DrawHeader handles the top of the window
 func (w *IssueWindow) DrawHeader() {
 	printLine(fmt.Sprintf("[triage] %s", w.target), w.x, w.y)
 }
 
+// DrawMenu handles the hotkeys and menu items
 func (w *IssueWindow) DrawMenu() {
 	// top menu
 
@@ -566,6 +606,7 @@ func (w *IssueWindow) DrawMenu() {
 
 }
 
+// DrawFilter shows the current filter
 func (w *IssueWindow) DrawFilter() {
 	cursor := " "
 	if w.currentIndex == -1 {
@@ -578,6 +619,7 @@ func (w *IssueWindow) DrawFilter() {
 	printLine(fmt.Sprintf(" %s filter: %s", cursor, w.currentFilter), w.x, w.y+3)
 }
 
+// Draw does all the issues
 func (w *IssueWindow) Draw() {
 	w.DrawHeader()
 	w.DrawMenu()
@@ -593,7 +635,7 @@ func (w *IssueWindow) Draw() {
 	// printLine(fmt.Sprintf("ci: %d si: %d li: %d", w.currentIndex, w.scrollIndex, w.lastIndex), 1, 1)
 
 	if w.scrollIndex > 0 {
-		y += 1
+		y++
 		printLine("--more--", w.x+3, 3+y)
 	}
 
@@ -601,7 +643,7 @@ func (w *IssueWindow) Draw() {
 		if i < w.scrollIndex {
 			continue
 		}
-		y += 1
+		y++
 		// we've reached the edge
 		if y >= w.y2-4 {
 			if i < len(w.currentIssues) {
@@ -628,30 +670,33 @@ func (w *IssueWindow) Draw() {
 
 		// Check for expanded
 		if i == w.currentIndex && w.enableExpanding {
-			y += 1
+			y++
 			printLine(issue.URL, 8, 3+y)
 			lines := wordWrap(issue.Body, w.x2-9)
 			for _, line := range lines {
-				y += 1
+				y++
 				printLine(line, 8, 3+y)
 			}
 		}
 	}
 }
 
+// Len for Sortable
 func (w *IssueWindow) Len() int {
 	return len(w.currentIssues)
 }
 
+// Swap for Sortable
 func (w *IssueWindow) Swap(i, j int) {
 	(w.currentIssues)[i], (w.currentIssues)[j] = (w.currentIssues)[j], (w.currentIssues)[i]
 }
 
+// Less for Sortable, defers to TriageSortLess
 func (w *IssueWindow) Less(i, j int) bool {
 	return TriageSortLess(w.currentIssues[i], w.currentIssues[j])
 }
 
-// TriageSort sorts in order of:
+// TriageSortLess sorts in order of:
 // 1. Anything with Priority 1
 // 2. By TriageNumber (MilestonePriorityType)
 func TriageSortLess(i, j *Issue) bool {
@@ -669,13 +714,11 @@ func TriageSortLess(i, j *Issue) bool {
 	if iPri == 1 {
 		if jPri != 1 {
 			return true
-		} else {
-			return iNumber < jNumber
 		}
+		return iNumber < jNumber
 	} else if jPri == 1 {
 		// we already know iPri is not 1
 		return false
-	} else {
-		return iNumber < jNumber
 	}
+	return iNumber < jNumber
 }

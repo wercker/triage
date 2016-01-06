@@ -5,6 +5,7 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
+// Window interface for basic window functionality
 type Window interface {
 	Init() error
 	Draw()
@@ -12,15 +13,18 @@ type Window interface {
 	HandleEvent(termbox.Event)
 }
 
+// Console implements the outer level of console interaction
 type Console struct {
 	Windows       []Window
 	CurrentWindow Window
 }
 
+// NewConsole constructor
 func NewConsole(client *github.Client) *Console {
 	return &Console{}
 }
 
+// Init sets up the outer console
 func (c *Console) Init() error {
 	return nil
 }
@@ -33,6 +37,7 @@ func (c *Console) Draw() error {
 	return nil
 }
 
+// AddWindow in case we ever have more than one?
 func (c *Console) AddWindow(w Window) {
 	c.Windows = append(c.Windows, w)
 	width, height := termbox.Size()

@@ -32,12 +32,14 @@ var (
 	}
 )
 
+// Options are our global options
 type Options struct {
 	APIToken string
 	Debug    bool
 	Logger   *logrus.Logger
 }
 
+// NewOptions constructor
 func NewOptions(c *cli.Context) (*Options, error) {
 	debug := c.GlobalBool("debug")
 	logger := logrus.New()
@@ -52,6 +54,7 @@ func NewOptions(c *cli.Context) (*Options, error) {
 	}, nil
 }
 
+// AuthClient for github
 func AuthClient(opts *Options) *http.Client {
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: opts.APIToken},

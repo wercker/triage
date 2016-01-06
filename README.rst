@@ -52,6 +52,9 @@ F5 will force a refresh.
 
 Ctrl-C exits, as does typing ":q" or ":wq" into the filter field.
 
+You can put config information in `triage.yml`, and eventually TODO(termie) in
+something like .triage/config
+
 -------------
 Sorting Order
 -------------
@@ -238,33 +241,35 @@ more than that you're going to want to make specific triage calls.
 An Example Config
 -----------------
 
+
 Also happen to show the defaults (besides the `projects` section) that you'll
 get if you just run with it::
 
-  next-milestone: Next
-  someday-milestone: Someday
+  triage.yml
+    next-milestone: Next
+    someday-milestone: Someday
 
-  projects:
-    - wercker/foo
-    - wercker/bar
+    projects:
+      - wercker/foo
+      - wercker/bar
 
-  types:
-    - name: bug
-      color: f7c6c7
-    - name: task
-      color: fef2c0
-    - name: enhancement
-      color: bfe5bf
-    - name: question
-      color: c7def8
+    types:
+      - name: bug
+        color: f7c6c7
+      - name: task
+        color: fef2c0
+      - name: enhancement
+        color: bfe5bf
+      - name: question
+        color: c7def8
 
-  priorities:
-    - name: blocker
-      color: e11d21
-    - name: critical
-      color: eb6420
-    - name: normal
-      color: fbca04
-    - name: low
-      color: "009800"
+    priorities:
+      - name: blocker
+        color: e11d21
+      - name: critical
+        color: eb6420
+      - name: normal
+        color: fbca04
+      - name: low
+        color: "009800"
 

@@ -68,12 +68,14 @@ var (
 	}
 )
 
+// Milestone is all we care about re: milestones
 type Milestone struct {
 	Number int
 	Title  string
 	DueOn  *time.Time
 }
 
+// Milestones implemenation of milestones-for-project for github api
 func (a *GithubAPI) Milestones(project string) ([]*Milestone, error) {
 	owner, repo, err := ownerRepo(project)
 	if err != nil {

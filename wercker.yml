@@ -1,0 +1,39 @@
+box: tcnksm/gox:1.4.2
+
+build:
+  steps:
+    - setup-go-workspace:
+      package-dir: github.com/wercker/triage
+    - glide-install
+    - script:
+        name: go vet
+        code: |
+            go get golang.org/x/tools/cmd/vet
+            go vet *.go
+
+    - golint
+
+    - script:
+        name: go test
+        code: go test
+
+    - script:
+        name: clear out the build binaries
+        code: |
+            rm -rf $GOPATH/pkg
+
+    - script:
+        name: gox
+        code: |
+            gox \
+              -ldflags="-X main.GitCommit $WERCKER_GIT_COMMIT -X main.PatchVersion $(( ($(date +%s) - $(date --date=20160101 +%s) )/(60*60*24) )) -X main.Compiled $(date +%s)" \
+              -os="linux darwin" \
+              -arch="amd64 386" \
+              -output "$WERCKER_OUTPUT_DIR/pkg/{{.OS}}_{{.Arch}}/sentcli"
+
+    - script:
+        name: prepare
+        code: |
+            echo $WERCKER_GIT_COMMIT > $WERCKER_OUTPUT_DIR/HEAD
+            mv $WERCKER_OUTPUT_DIR/pkg $WERCKER_OUTPUT_DIR/latest
+            cp -r $WERCKER_OUTPUT_DIR/latest $WERCKER_OUTPUT_DIR/$WERCKER_GIT_COMMIT

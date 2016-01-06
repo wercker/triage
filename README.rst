@@ -4,19 +4,65 @@ Triage Really Invigorates All Github Experiences
 Triage is a small, opinionated, tool for managing your github issues for an
 organization.
 
+Before You Start
+----------------
+
+Grab yourself a personal access token from Github:
+
+  https://github.com/settings/tokens
+
+Add it to your env as GITHUB_API_TOKEN
+
+
+How To Build
+------------
+
+N.B. I'm using a really old glide for various purposes, if all else fails the
+glide.yaml has a list of the packages you need.
+
 Quickstart::
 
   $ glide in
   $ glide install
   $ go build
 
-  grab yourself a github api key
 
-  $ ./triage ui --api-token=<your api key>
+How To Use
+----------
 
+::
 
-What you'll see is a list of all the open issues (currently sorted by modified),you can scroll through them and note the menu options. If, for example, you hit
-"m" then scroll through them you can hit "1" to mark the ones for this milestone, "2" for the next and so on
+  $ ./triage --api-token=<your api token> ui repo:some/repo
+
+What you'll see is a list of all the open issues (sorted by number until you
+start prioritizing things).
+
+You can scroll through them with up/down, esc and left will back you out of
+things.
+
+When the cursor is over the filter, you can quick filter by typing stuff.
+
+When the cursor is over an issue there are some menu options showing hotkeys.
+If, for example, you hit "p" then scroll through them you can hit "1" to mark
+the current issue with priority Blocker, "2" for Critical and so on.
+
+F5 will force a refresh.
+
+Ctrl-C exits, as does typing ":q" or ":wq" into the filter field.
+
+-------------
+Sorting Order
+-------------
+
+In ascending order, it will show:
+
+ 1. Anything with priority 1 (defaults to "blocker")
+ 2. Items sorted by Milestone > Priority > Type
+ 3. In the event of a tie, lowest issue number
+
+-------------
+Caveat Emptor
+-------------
 
 Surely full of bugs, most of them might not kill you. Pretty much panics on
 anything that goes wrong with hopes that you'll figure out what's going on
@@ -55,6 +101,9 @@ you want to sort them in::
   # show the labels for a project
   $ triage show-labels owner/repo
 
+
+In general the labels will create themselves as you use them for priority and
+type.
 
 ------------------
 Initial Milestones
@@ -161,111 +210,36 @@ Github Search will only give you up to 1000 results, so if you've got a ton
 more than that you're going to want to make specific triage calls.
 
 
-Everything that follows is a lie.
+An Example Config
+-----------------
 
-::
+Also happen to show the defaults (besides the `projects` section) that you'll
+get if you just run with it::
 
-  Config
-  ------
+  next-milestone: Next
+  someday-milestone: Someday
 
-  Orgmode
-    org: wercker # organization we'll be acting for
-    milestones:  # assigned a number hotkey based on next due date
-      - name: foo
-        date: xxx
-        desc: asdsadas
+  projects:
+    - wercker/foo
+    - wercker/bar
 
-    labels:
-      - name: bug
-        color: red
-        hotkey: b
-      - name: enhancement
-        color: blue
-        hotkey: e
+  types:
+    - name: bug
+      color: f7c6c7
+    - name: task
+      color: fef2c0
+    - name: enhancement
+      color: bfe5bf
+    - name: question
+      color: c7def8
 
-    projects: # sync from interface?
-      - name
-      - name
-      - name
-
-
-
-  Singlemode
-    project: name
-    milestones:  # assigned a number hotkey based on next due date
-      - Name: foo
-      - Date: xxx
-      - Description: asdsadas
-    labels:
-      - name: bug
-        color: red
-        hotkey: b
-      - name: enhancement
-        color: blue
-        hotkey: e
-
-  Windows
-  -------
-
-  Repo:
-    Select repos to filter on
-    Refresh repos
-    (Load repos from local cache)
-
-  Milestones:
-    List milestones from selected projects
-      Compact:
-        "milestone title -> projectname, projectname, projectname"
-        "milestone title -> projectname, projectname"
-      Expanded:
-        milestone title
-          project
-          * project
-          * project
-        milestone title
-
-    Set milestones across projects
-    Delete milestones
-
-  Issue List:
-    List of search issues
-    List of issues for a project
-    Quick assign labels to issues via hotkey
-    Filter issues by typing
-    Quick-view issue
-    Hotkey + Filter Assign
-    Hotkey + Filter Milestone
-
-  Expanded Issue:
-    Issue Text
-    Comments
-    Reply
-    Hotkeys for labeling
-    Hotkey + Filter Assign
-    Hotkey + Filter Milestone
-
-
-  UI Concepts
-  -----------
-
-  Header
-    - Tabs
-  List + Cursor
-  Expandable Sublist
-  Scrollable List
-  Scrollable Text
-  Hotkey
-  Pop-up menu with filter
-  Filtering
-  Switch to Text Editor
-
-
-  Commands
-  --------
-
-  - sync milestones
-    - gather all milestones
-    - delete milestones
-    - set milestones for all selected projects
-
+  priorities:
+    - name: blocker
+      color: e11d21
+    - name: critical
+      color: eb6420
+    - name: normal
+      color: fbca04
+    - name: low
+      color: "009800"
 

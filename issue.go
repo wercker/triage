@@ -55,11 +55,12 @@ type IssueWindow struct {
 	// selectedRepos []github.Issues
 	currentIndex    int
 	lastIndex       int
-	currentExpanded int
 	currentIssues   []*Issue
 	currentFilter   string
 	currentMenu     string
 	scrollIndex     int
+	enableSorting   bool
+	enableExpanding bool
 	// Milestones are weird
 	milestones map[string][]*Milestone
 	priorities []Priority
@@ -76,7 +77,7 @@ func NewIssue(issue github.Issue, ms map[string][]*Milestone, ps []Priority, ts 
 	number := *issue.Number
 	title := *issue.Title
 	body := *issue.Body
-	url := *issue.URL
+	url := *issue.HTMLURL
 	owner, repo, _ := ownerRepoFromURL(url)
 	project := fmt.Sprintf("%s/%s", owner, repo)
 
@@ -160,7 +161,8 @@ func NewIssueWindow(client *github.Client, opts *Options, config *Config, api AP
 		config:          config,
 		api:             api,
 		currentIndex:    -1,
-		currentExpanded: -1,
+		enableSorting:   true,
+		enableExpanding: false,
 		target:          target,
 	}
 }
@@ -175,7 +177,7 @@ func (w *IssueWindow) Init() error {
 			}
 		}
 	} else {
-		target += w.target
+		target += fmt.Sprintf(" %s", w.target)
 	}
 	w.target = target
 
@@ -280,10 +282,6 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 				w.currentMenu = ""
 				break
 			}
-			if w.currentExpanded != -1 {
-				w.currentExpanded = -1
-				break
-			}
 			if w.currentIndex != -1 {
 				w.currentIndex = -1
 				break
@@ -304,9 +302,6 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 			if w.currentIndex >= len(w.currentIssues) {
 				w.currentIndex = len(w.currentIssues) - 1
 			}
-			if w.currentExpanded != -1 {
-				w.currentExpanded = w.currentIndex
-			}
 			if w.currentIndex-w.scrollIndex > w.y2-10 {
 				w.Scroll(20)
 			}
@@ -326,10 +321,9 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 
 			// move up and maintain expandededness
 			w.currentIndex -= 1
-			if w.currentExpanded != -1 {
-				w.currentExpanded = w.currentIndex
-			}
 			return
+		case termbox.KeyF2:
+			w.enableSorting = !w.enableSorting
 		case termbox.KeyF5:
 			w.RefreshIssues()
 		case termbox.KeyBackspace:
@@ -346,11 +340,7 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 				termbox.Close()
 				os.Exit(0)
 			}
-			if w.currentExpanded == w.currentIndex {
-				w.currentExpanded = -1
-			} else {
-				w.currentExpanded = w.currentIndex
-			}
+			w.enableExpanding = !w.enableExpanding
 			return
 		}
 
@@ -364,7 +354,7 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 				// reset scrollidex
 				w.scrollIndex = 0
 			}
-		} else if w.currentMenu == "" {
+		} else {
 			// Try to find the menu item
 			// TODO(termie): hardcoded for now
 			switch ev.Ch {
@@ -374,16 +364,18 @@ func (w *IssueWindow) HandleEvent(ev termbox.Event) {
 				w.currentMenu = "type"
 			case 'm':
 				w.currentMenu = "milestone"
-			}
-		} else if w.currentMenu != "" {
-			// We're in a menu, handle a menu event
-			switch w.currentMenu {
-			case "priority":
-				w.HandlePriorityEvent(ev)
-			case "type":
-				w.HandleTypeEvent(ev)
-			case "milestone":
-				w.HandleMilestoneEvent(ev)
+			default:
+				if w.currentMenu != "" {
+					// We're in a menu, handle a menu event
+					switch w.currentMenu {
+					case "priority":
+						w.HandlePriorityEvent(ev)
+					case "type":
+						w.HandleTypeEvent(ev)
+					case "milestone":
+						w.HandleMilestoneEvent(ev)
+					}
+				}
 			}
 		}
 	}
@@ -530,12 +522,26 @@ func (w *IssueWindow) DrawHeader() {
 }
 
 func (w *IssueWindow) DrawMenu() {
+	// top menu
+
+	sorting := "true"
+	if !w.enableSorting {
+		sorting = "nope"
+	}
+	expanding := "true"
+	if !w.enableExpanding {
+		expanding = "nope"
+	}
+
+	printLine(fmt.Sprintf("  hotkeys: [F2] sorting: %s [F5] refresh issues [enter] expand: %s", sorting, expanding), w.x, w.y+1)
+
 	if w.currentIndex == -1 {
 		return
 	}
 
+	// sub menu
 	if w.currentMenu == "" {
-		printLine(fmt.Sprintf("    issue: [m]ilestone [p]riority [t]ype [enter] expand/contract"), w.x, w.y+2)
+		printLine(fmt.Sprintf("    issue: [m]ilestone [p]riority [t]ype"), w.x, w.y+2)
 	}
 
 	if w.currentMenu == "milestone" {
@@ -578,7 +584,9 @@ func (w *IssueWindow) Draw() {
 	w.DrawFilter()
 
 	w.Filter(w.currentFilter)
-	sort.Sort(w)
+	if w.enableSorting {
+		sort.Sort(w)
+	}
 	y := 0
 
 	//debug
@@ -619,7 +627,9 @@ func (w *IssueWindow) Draw() {
 		), w.x+2, 3+y)
 
 		// Check for expanded
-		if i == w.currentExpanded {
+		if i == w.currentIndex && w.enableExpanding {
+			y += 1
+			printLine(issue.URL, 8, 3+y)
 			lines := wordWrap(issue.Body, w.x2-9)
 			for _, line := range lines {
 				y += 1

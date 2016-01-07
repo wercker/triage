@@ -61,6 +61,13 @@ func AuthClient(opts *Options) *http.Client {
 }
 
 func cmdUI(opts *Options, target string) error {
+	f, err := os.Create("triage.log")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	logger.Out = f
+
 	if err := termbox.Init(); err != nil {
 		return err
 	}

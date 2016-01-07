@@ -707,6 +707,7 @@ type TopIssueWindow struct {
 	API         API
 	Target      string
 	Filter      string
+	Sort        string
 	Status      string
 	Focus       IWindow
 	ContextMenu IWindow
@@ -721,6 +722,7 @@ type TopIssueWindow struct {
 	Menu              IWindow
 	DefaultMenu       IWindow
 	FilterLine        IWindow
+	SortLine          IWindow
 	List              IWindow
 	ListMenu          IWindow
 	ListMilestoneMenu IWindow
@@ -741,6 +743,8 @@ func NewTopIssueWindow(client *github.Client, opts *Options, config *Config, api
 }
 
 func (w *TopIssueWindow) Init() error {
+	defer profile("TopIssueWindow.Init").Stop()
+
 	// build our search string
 	target := "is:open is:issue"
 	if w.Target == "" {
@@ -774,6 +778,7 @@ func (w *TopIssueWindow) Init() error {
 	w.Header = NewIssueHeaderWindow(w)
 	w.List = list
 	w.FilterLine = NewIssueFilterWindow(w)
+	w.SortLine = NewIssueSortWindow(w)
 	w.StatusLine = NewIssueStatusWindow(w)
 	w.ListMenu = NewIssueListMenu(list)
 	w.ListMilestoneMenu = NewIssueListMilestoneMenu(list)
@@ -788,6 +793,7 @@ func (w *TopIssueWindow) Init() error {
 		w.ListPriorityMenu,
 		w.ListTypeMenu,
 		w.FilterLine,
+		w.SortLine,
 		w.StatusLine,
 	} {
 		err := win.Init()
@@ -811,11 +817,12 @@ func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
 	w.Status = ""
 	w.Header.Draw(x, y, x1, y)
 	// w.Menu.Draw(x, y+1, x1, y+2)
-	w.FilterLine.Draw(x, y+2, x1, y+2)
+	w.SortLine.Draw(x, y+2, x1, y+2)
+	w.FilterLine.Draw(x, y+3, x1, y+3)
 	if w.ContextMenu != nil {
-		w.ContextMenu.Draw(x, y+3, x1, y+3)
+		w.ContextMenu.Draw(x, y+4, x1, y+4)
 	}
-	w.List.Draw(x, y+4, x1, y1-1)
+	w.List.Draw(x, y+5, x1, y1-2)
 	w.StatusLine.Draw(x, y1-1, x1, y1-1)
 }
 
@@ -838,11 +845,15 @@ func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 			w.Focus = w.List
 			w.ContextMenu = w.ListMenu
 			w.Filter = ""
+			w.Sort = ""
 			return true, nil
 		default:
 			switch ev.Ch {
 			case '/':
 				w.Focus = w.FilterLine
+				return true, nil
+			case 's':
+				w.Focus = w.SortLine
 				return true, nil
 			}
 		}
@@ -890,13 +901,17 @@ func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
 	if w.Focus == w {
 		cursor = ">"
 	}
-	printLine(fmt.Sprintf("%s [/] filter: %s", cursor, w.Filter), x, y)
+	printLine(fmt.Sprintf("%s[/] filter: %s", cursor, w.Filter), x+1, y)
 }
 
 func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
+		case termbox.KeyArrowUp:
+			w.Focus = w.SortLine
+			w.ContextMenu = nil
+			return true, nil
 		case termbox.KeyArrowDown:
 			fallthrough
 		case termbox.KeyEsc:
@@ -925,6 +940,56 @@ func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
+// Sort
+type IssueSortWindow struct {
+	*IssueSubwindow
+}
+
+func NewIssueSortWindow(w *TopIssueWindow) *IssueSortWindow {
+	return &IssueSortWindow{&IssueSubwindow{w}}
+}
+
+func (w *IssueSortWindow) Draw(x, y, x1, y1 int) {
+	cursor := " "
+	if w.Focus == w {
+		cursor = ">"
+	}
+	printLine(fmt.Sprintf("%s[s] sort: %s", cursor, w.Sort), x+1, y)
+}
+
+func (w *IssueSortWindow) HandleEvent(ev termbox.Event) (bool, error) {
+	switch ev.Type {
+	case termbox.EventKey:
+		switch ev.Key {
+		case termbox.KeyArrowDown:
+			w.Focus = w.FilterLine
+			w.ContextMenu = nil
+		case termbox.KeyEsc:
+			w.Focus = w.List
+			w.ContextMenu = w.ListMenu
+			return true, nil
+		case termbox.KeyBackspace:
+			// Backspace starts clearing our filter
+			if len(w.Sort) > 0 {
+				w.Sort = w.Sort[:len(w.Sort)-1]
+			}
+			return true, nil
+		case termbox.KeySpace:
+			w.Sort += " "
+			return true, nil
+		default:
+			switch ev.Ch {
+			case 0:
+			case ' ':
+			default:
+				w.Sort += string(ev.Ch)
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 // IssueListMenu
 type IssueListMenu struct {
 	*IssueListWindow
@@ -934,14 +999,30 @@ func NewIssueListMenu(w *IssueListWindow) *IssueListMenu {
 	return &IssueListMenu{w}
 }
 
+func (w *IssueListMenu) Init() error {
+	return nil
+}
+
 func (w *IssueListMenu) Draw(x, y, x1, y1 int) {
-	printLine("[m] milestone [p] priority [t] type", x+2, y)
+	if w.Focus != w.List {
+		return
+	}
+
+	expand := "expand"
+	if w.expanding {
+		expand = "collapse"
+	}
+
+	printLine(fmt.Sprintf("[m] milestone [p] priority [t] type [enter] %s", expand), x+2, y)
 }
 
 func (w *IssueListMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
+		case termbox.KeyEnter:
+			w.expanding = !w.expanding
+			return true, nil
 		default:
 			switch ev.Ch {
 			case 'm':
@@ -968,7 +1049,14 @@ func NewIssueListMilestoneMenu(w *IssueListWindow) *IssueListMilestoneMenu {
 	return &IssueListMilestoneMenu{w}
 }
 
+func (w *IssueListMilestoneMenu) Init() error {
+	return nil
+}
+
 func (w *IssueListMilestoneMenu) Draw(x, y, x1, y1 int) {
+	if w.Focus != w.List {
+		return
+	}
 	printLine("milestone: [1] current [2] next [3] someday", x+2, y)
 }
 
@@ -1018,7 +1106,15 @@ func NewIssueListPriorityMenu(w *IssueListWindow) *IssueListPriorityMenu {
 	return &IssueListPriorityMenu{w}
 }
 
+func (w *IssueListPriorityMenu) Init() error {
+	return nil
+}
+
 func (w *IssueListPriorityMenu) Draw(x, y, x1, y1 int) {
+	if w.Focus != w.List {
+		return
+	}
+
 	menu := "priority:"
 	for i, p := range w.Priorities {
 		menu += fmt.Sprintf(" [%d] %s", i+1, p.Name)
@@ -1082,7 +1178,14 @@ func NewIssueListTypeMenu(w *IssueListWindow) *IssueListTypeMenu {
 	return &IssueListTypeMenu{w}
 }
 
+func (w *IssueListTypeMenu) Init() error {
+	return nil
+}
+
 func (w *IssueListTypeMenu) Draw(x, y, x1, y1 int) {
+	if w.Focus != w.List {
+		return
+	}
 	menu := "type:"
 	for i, p := range w.Types {
 		menu += fmt.Sprintf(" [%d] %s", i+1, p.Name)
@@ -1139,15 +1242,16 @@ func (w *IssueListTypeMenu) HandleEvent(ev termbox.Event) (bool, error) {
 
 // Issue List
 type IssueListWindow struct {
-	issues          []*Issue
-	currentIssues   []*Issue
-	currentIndex    int
-	lastIndex       int
-	scrollIndex     int
-	enableSorting   bool
-	enableExpanding bool
+	issues        []*Issue
+	currentIssues []*Issue
+	currentIndex  int
+	lastIndex     int
+	scrollIndex   int
+	sorting       bool
+	expanding     bool
 
 	currentFilter string
+	sortFunc      func(*Issue, *Issue) bool
 
 	*IssueSubwindow
 }
@@ -1157,6 +1261,8 @@ func NewIssueListWindow(w *TopIssueWindow) *IssueListWindow {
 }
 
 func (w *IssueListWindow) Init() error {
+	w.sortFunc = TriageSort
+	w.sorting = true
 	// fetch the initial list of issues, etc
 	err := w.refresh()
 	if err != nil {
@@ -1169,29 +1275,23 @@ func (w *IssueListWindow) Init() error {
 func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 	w.filter(w.Filter)
 
-	// if w.enableSorting {
-	//   sort.Sort(w)
-	// }
+	if w.sorting {
+		w.sort(w.Sort)
+	}
 	line := 0
 
 	//debug
 	w.Status += fmt.Sprintf(" ci: %d si: %d li: %d", w.currentIndex, w.scrollIndex, w.lastIndex)
 
 	if w.scrollIndex > 0 {
-		printLine("--more--", x+3, y)
-		line++
+		// // printLine("--more--", x+3, y)
+		// printLine(string('\u2191'), x, y)
+		termbox.SetCell(x, y, '\u2191', termbox.ColorDefault, termbox.ColorDefault)
 	}
 
 	for i, issue := range w.currentIssues {
 		if i < w.scrollIndex {
 			continue
-		}
-		// we've reached the edge
-		if y+line >= y1-1 {
-			if i < len(w.currentIssues) {
-				printLine("--more--", x+3, y1-1)
-			}
-			break
 		}
 		cursor := " "
 		if i == w.currentIndex && w.Focus == w {
@@ -1200,7 +1300,7 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 		w.lastIndex = i
 
 		printLine(fmt.Sprintf(
-			"%s %d%d%d %s/%-4d %s",
+			"%s%d%d%d %s/%-4d %s",
 			cursor,
 			issue.Milestone.Index,
 			issue.Priority.Index,
@@ -1208,10 +1308,19 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 			issue.Repo[:5],
 			issue.Number,
 			issue.Title,
-		), x, y+line)
+		), x+1, y+line)
+
+		// we've reached the edge
+		if y+line >= y1 {
+			if i < len(w.currentIssues) {
+				termbox.SetCell(x, y1, '\u2193', termbox.ColorDefault, termbox.ColorDefault)
+				// printLine("--more--", x+3, y1-1)
+			}
+			break
+		}
 
 		// Check for expanded
-		if i == w.currentIndex && w.enableExpanding {
+		if i == w.currentIndex && w.expanding {
 			y++
 			printLine(issue.URL, x+5, y+line)
 			body := wordWrap(issue.Body, x1-9)
@@ -1256,7 +1365,7 @@ func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 			if w.currentIndex >= len(w.currentIssues) {
 				w.currentIndex = len(w.currentIssues) - 1
 			}
-			if w.lastIndex-w.currentIndex < 1 && w.lastIndex < len(w.currentIssues)-1 {
+			if w.lastIndex < w.currentIndex && w.lastIndex < len(w.currentIssues)-1 {
 				w.scroll(10)
 			}
 			if w.currentIndex > w.lastIndex {
@@ -1277,7 +1386,7 @@ func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 				w.currentIndex = 0
 			}
 
-			if w.currentIndex-w.scrollIndex < 1 {
+			if w.currentIndex < w.scrollIndex {
 				w.scroll(-10)
 			}
 			return true, nil
@@ -1289,6 +1398,7 @@ func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 
 // refreshIssues updates all the issues for the current query
 func (w *IssueListWindow) refresh() error {
+	defer profile("IssueListWindow.refresh").Stop()
 	rawIssues, err := w.API.Search(w.Target)
 	if err != nil {
 		return err
@@ -1356,6 +1466,15 @@ IssueLoop:
 	w.currentIssues = selected
 }
 
+// sort the issues based on sort string
+func (w *IssueListWindow) sort(substr string) {
+	if substr == "" {
+		w.sortFunc = TriageSort
+	}
+
+	sort.Sort(w)
+}
+
 // scroll moves the dang window contents around
 func (w *IssueListWindow) scroll(i int) {
 	w.scrollIndex += i
@@ -1373,6 +1492,21 @@ func (w *IssueListWindow) scroll(i int) {
 	}
 }
 
+// Len for Sortable
+func (w *IssueListWindow) Len() int {
+	return len(w.currentIssues)
+}
+
+// Swap for Sortable
+func (w *IssueListWindow) Swap(i, j int) {
+	(w.currentIssues)[i], (w.currentIssues)[j] = (w.currentIssues)[j], (w.currentIssues)[i]
+}
+
+// Less for Sortable, defers to TriageSortLess
+func (w *IssueListWindow) Less(i, j int) bool {
+	return w.sortFunc(w.currentIssues[i], w.currentIssues[j])
+}
+
 // Sorting Stuff
 
 // Len for Sortable
@@ -1387,13 +1521,13 @@ func (w *IssueWindow) Swap(i, j int) {
 
 // Less for Sortable, defers to TriageSortLess
 func (w *IssueWindow) Less(i, j int) bool {
-	return TriageSortLess(w.currentIssues[i], w.currentIssues[j])
+	return TriageSort(w.currentIssues[i], w.currentIssues[j])
 }
 
 // TriageSortLess sorts in order of:
 // 1. Anything with Priority 1
 // 2. By TriageNumber (MilestonePriorityType)
-func TriageSortLess(i, j *Issue) bool {
+func TriageSort(i, j *Issue) bool {
 	iNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", i.Milestone.Index, i.Priority.Index, i.Type.Index))
 	jNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", j.Milestone.Index, j.Priority.Index, j.Type.Index))
 	iPri := i.Priority.Index

@@ -77,6 +77,7 @@ type Milestone struct {
 
 // Milestones implemenation of milestones-for-project for github api
 func (a *GithubAPI) Milestones(project string) ([]*Milestone, error) {
+	defer profile("GithubAPI.Milestones").Stop()
 	owner, repo, err := ownerRepo(project)
 	if err != nil {
 		return nil, err

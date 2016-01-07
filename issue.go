@@ -718,7 +718,9 @@ type TopIssueWindow struct {
 	Types      []Type
 
 	// Sub-Windows
+	Help              IWindow
 	Header            IWindow
+	GlobalMenu        IWindow
 	Menu              IWindow
 	DefaultMenu       IWindow
 	FilterLine        IWindow
@@ -775,7 +777,9 @@ func (w *TopIssueWindow) Init() error {
 
 	list := NewIssueListWindow(w)
 
+	w.Help = NewIssueHelpWindow(w)
 	w.Header = NewIssueHeaderWindow(w)
+	w.GlobalMenu = NewIssueGlobalMenu(w)
 	w.List = list
 	w.FilterLine = NewIssueFilterWindow(w)
 	w.SortLine = NewIssueSortWindow(w)
@@ -786,7 +790,9 @@ func (w *TopIssueWindow) Init() error {
 	w.ListTypeMenu = NewIssueListTypeMenu(list)
 
 	for _, win := range []IWindow{
+		w.Help,
 		w.Header,
+		w.GlobalMenu,
 		w.List,
 		w.ListMenu,
 		w.ListMilestoneMenu,
@@ -816,7 +822,7 @@ func (w *TopIssueWindow) Init() error {
 func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
 	w.Status = ""
 	w.Header.Draw(x, y, x1, y)
-	// w.Menu.Draw(x, y+1, x1, y+2)
+	w.GlobalMenu.Draw(x, y+1, x1, y+1)
 	w.SortLine.Draw(x, y+2, x1, y+2)
 	w.FilterLine.Draw(x, y+3, x1, y+3)
 	if w.ContextMenu != nil {
@@ -824,6 +830,7 @@ func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
 	}
 	w.List.Draw(x, y+5, x1, y1-2)
 	w.StatusLine.Draw(x, y1-1, x1, y1-1)
+	w.Help.Draw(x, y, x1, y1)
 }
 
 func (w *TopIssueWindow) HandleEvent(ev termbox.Event) (bool, error) {
@@ -855,8 +862,43 @@ func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 			case 's':
 				w.Focus = w.SortLine
 				return true, nil
+			case '?':
+				w.Focus = w.Help
+				return true, nil
 			}
 		}
+	}
+	return false, nil
+}
+
+// Help
+type IssueHelpWindow struct {
+	*IssueSubwindow
+}
+
+func NewIssueHelpWindow(w *TopIssueWindow) *IssueHelpWindow {
+	return &IssueHelpWindow{&IssueSubwindow{w}}
+}
+
+func (w *IssueHelpWindow) Draw(x, y, x1, y1 int) {
+	if w.Focus != w.Help {
+		return
+	}
+
+	printLine("HELP HELP HELP", x, y)
+	printLine("HELP HELP HELP", x, y+1)
+	printLine("HELP HELP HELP", x, y+2)
+	printLine("HELP HELP HELP", x, y+3)
+	printLine("HELP HELP HELP", x, y+4)
+	printLine("HELP HELP HELP", x, y+5)
+}
+
+func (w *IssueHelpWindow) HandleEvent(ev termbox.Event) (bool, error) {
+	switch ev.Type {
+	case termbox.EventKey:
+		w.Focus = w.List
+		w.ContextMenu = w.ListMenu
+		return true, nil
 	}
 	return false, nil
 }
@@ -872,6 +914,19 @@ func NewIssueHeaderWindow(w *TopIssueWindow) *IssueHeaderWindow {
 
 func (w *IssueHeaderWindow) Draw(x, y, x1, y1 int) {
 	printLine(fmt.Sprintf("*triage* %s", w.Target), x, y)
+}
+
+// GlobalMenu
+type IssueGlobalMenu struct {
+	*IssueSubwindow
+}
+
+func NewIssueGlobalMenu(w *TopIssueWindow) *IssueGlobalMenu {
+	return &IssueGlobalMenu{&IssueSubwindow{w}}
+}
+
+func (w *IssueGlobalMenu) Draw(x, y, x1, y1 int) {
+	printLine(fmt.Sprintf("[?] help [^C] exit"), x+2, y)
 }
 
 // Statusline

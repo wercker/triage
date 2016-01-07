@@ -1,5 +1,9 @@
 box: tcnksm/gox:1.5.1
 
+dev:
+  steps:
+    - internal/shell
+
 build:
   steps:
     - setup-go-workspace:
@@ -37,7 +41,7 @@ deploy:
         packages: zip gzip tar
     - script:
         name: version
-        code: export TRIAGE_VERSION=$(./linux_amd64/triage version)
+        code: export TRIAGE_VERSION=$(./linux-amd64/triage version)
     - script:
         name: prepare release
         code: |
@@ -51,6 +55,8 @@ deploy:
     - github-upload-asset:
         token: $GITHUB_TOKEN
         file: triage-v${TRIAGE_VERSION}-darwin-amd64.zip
+        content-type: application/zip
     - github-upload-asset:
         token: $GITHUB_TOKEN
         file: triage-v${TRIAGE_VERSION}-linux-amd64.tar.gz
+        content-type: application/x-gzip

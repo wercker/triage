@@ -13,10 +13,10 @@ import (
 )
 
 var (
-	logger = logrus.New()
+	logger    = logrus.New()
 	uiCommand = cli.Command{
 		Name:  "ui",
-		Usage: "go into termbox mode",
+		Usage: "run the triage ui",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {
@@ -78,7 +78,7 @@ func cmdUI(opts *Options, target string) error {
 		return err
 	}
 
-	issueWindow := NewIssueWindow(client, opts, config, api, target)
+	issueWindow := NewTopIssueWindow(client, opts, config, api, target)
 	if err := issueWindow.Init(); err != nil {
 		return err
 	}
@@ -117,19 +117,21 @@ func printLine(str string, x int, y int) {
 	}
 }
 
-func drawAll(c *Console) {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+// func drawAll(c *Console) {
+//   termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
 
-	c.CurrentWindow.Draw()
+//   c.CurrentWindow.Draw()
 
-	termbox.Flush()
-}
+//   termbox.Flush()
+// }
 
 func main() {
 	app := cli.NewApp()
 	app.Author = "termie"
 	app.Name = "triage"
-	app.Usage = ""
+	app.Usage = "cross-project issue management for github"
+	// app.Usage = ""
+	app.Version = Version()
 	app.Commands = []cli.Command{
 		uiCommand,
 		showLabelsCommand,

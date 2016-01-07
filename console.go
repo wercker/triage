@@ -13,10 +13,17 @@ type Window interface {
 	HandleEvent(termbox.Event)
 }
 
+type IWindow interface {
+	Init() error
+	Draw(x, y, x1, y1 int)
+	// SetBounds(x1, y1, x2, y2 int)
+	HandleEvent(termbox.Event) (bool, error)
+}
+
 // Console implements the outer level of console interaction
 type Console struct {
-	Windows       []Window
-	CurrentWindow Window
+	Windows       []IWindow
+	CurrentWindow IWindow
 }
 
 // NewConsole constructor
@@ -32,16 +39,17 @@ func (c *Console) Init() error {
 // Draw the curent window
 func (c *Console) Draw() error {
 	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-	c.CurrentWindow.Draw()
+
+	width, height := termbox.Size()
+	c.CurrentWindow.Draw(0, 0, width, height)
 	termbox.Flush()
 	return nil
 }
 
 // AddWindow in case we ever have more than one?
-func (c *Console) AddWindow(w Window) {
+func (c *Console) AddWindow(w IWindow) {
 	c.Windows = append(c.Windows, w)
-	width, height := termbox.Size()
-	w.SetBounds(0, 0, width, height)
+	// w.SetBounds(0, 0, width, height)
 	if c.CurrentWindow == nil {
 		c.CurrentWindow = w
 	}

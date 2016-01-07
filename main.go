@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	logger    = logrus.New()
+	logger = logrus.New()
 	uiCommand = cli.Command{
 		Name:  "ui",
 		Usage: "go into termbox mode",
@@ -36,13 +36,11 @@ var (
 type Options struct {
 	APIToken string
 	Debug    bool
-	Logger   *logrus.Logger
 }
 
 // NewOptions constructor
 func NewOptions(c *cli.Context) (*Options, error) {
 	debug := c.GlobalBool("debug")
-	logger := logrus.New()
 	if debug {
 		logger.Level = logrus.DebugLevel
 	}
@@ -50,7 +48,6 @@ func NewOptions(c *cli.Context) (*Options, error) {
 	return &Options{
 		APIToken: c.GlobalString("api-token"),
 		Debug:    debug,
-		Logger:   logger,
 	}, nil
 }
 
@@ -141,6 +138,7 @@ func main() {
 		showMilestonesCommand,
 		setMilestonesCommand,
 		createMilestoneCommand,
+		versionCommand,
 	}
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{Name: "debug", Usage: "output debug info"},

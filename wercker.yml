@@ -1,4 +1,4 @@
-box: tcnksm/gox:1.4.2
+box: tcnksm/gox:1.5.1
 
 build:
   steps:
@@ -28,12 +28,29 @@ build:
             gox \
               -ldflags="-X main.GitCommit $WERCKER_GIT_COMMIT -X main.PatchVersion $(( ($(date +%s) - $(date --date=20160101 +%s) )/(60*60*24) )) -X main.Compiled $(date +%s)" \
               -os="linux darwin" \
-              -arch="amd64 386" \
-              -output "$WERCKER_OUTPUT_DIR/pkg/{{.OS}}_{{.Arch}}/sentcli"
+              -arch="amd64" \
+              -output "$WERCKER_OUTPUT_DIR/{{.OS}}-{{.Arch}}/triage"
 
+deploy:
+  steps:
+    - install-packages:
+        packages: zip gzip tar
     - script:
-        name: prepare
+        name: version
+        code: export TRIAGE_VERSION=$(./linux_amd64/triage version)
+    - script:
+        name: prepare release
         code: |
-            echo $WERCKER_GIT_COMMIT > $WERCKER_OUTPUT_DIR/HEAD
-            mv $WERCKER_OUTPUT_DIR/pkg $WERCKER_OUTPUT_DIR/latest
-            cp -r $WERCKER_OUTPUT_DIR/latest $WERCKER_OUTPUT_DIR/$WERCKER_GIT_COMMIT
+          mv darwin-amd64 triage-v${TRIAGE_VERSION}-darwin-amd64
+          mv linux-amd64 triage-v${TRIAGE_VERSION}-linux-amd64
+          zip -r triage-v${TRIAGE_VERSION}-darwin-amd64.zip triage-v${TRIAGE_VERSION}-darwin-amd64/
+          tar -cvzf triage-v${TRIAGE_VERSION}-linux-amd64.tar.gz triage-v${TRIAGE_VERSION}-linux-amd64
+    - github-create-release:
+        token: $GITHUB_TOKEN
+        tag: v$TRIAGE_VERSION
+    - github-upload-asset:
+        token: $GITHUB_TOKEN
+        file: triage-v${TRIAGE_VERSION}-darwin-amd64.zip
+    - github-upload-asset:
+        token: $GITHUB_TOKEN
+        file: triage-v${TRIAGE_VERSION}-linux-amd64.tar.gz

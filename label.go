@@ -104,7 +104,7 @@ func cmdSetLabels(opts *Options, target string) error {
 	}
 
 	for _, project := range projects {
-		opts.Logger.Debugln("Setting labels for:", project)
+		logger.Debugln("Setting labels for:", project)
 
 		owner, repo, err := ownerRepo(project)
 		if err != nil {
@@ -125,13 +125,13 @@ func cmdSetLabels(opts *Options, target string) error {
 			// check if we already exist but don't have the same color
 			if ok && *theirs.Color != ours.Color {
 				*theirs.Color = ours.Color
-				opts.Logger.Debugln("  updating color:", ours.Name)
+				logger.Debugln("  updating color:", ours.Name)
 				_, _, err = client.Issues.EditLabel(owner, repo, ours.Name, &theirs)
 				if err != nil {
 					return err
 				}
 			} else if !ok {
-				opts.Logger.Debugln("  creating:", ours.Name)
+				logger.Debugln("  creating:", ours.Name)
 				_, _, err = client.Issues.CreateLabel(
 					owner,
 					repo,
@@ -141,7 +141,7 @@ func cmdSetLabels(opts *Options, target string) error {
 					return err
 				}
 			} else {
-				opts.Logger.Debugln("  found existing:", ours.Name)
+				logger.Debugln("  found existing:", ours.Name)
 			}
 		}
 	}

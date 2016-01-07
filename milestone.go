@@ -82,7 +82,7 @@ func (a *GithubAPI) Milestones(project string) ([]*Milestone, error) {
 		return nil, err
 	}
 
-	a.opts.Logger.Debugln("Fetching milestones for:", project)
+	logger.Debugln("Fetching milestones for:", project)
 	milestones, _, err := a.client.Issues.ListMilestones(
 		owner,
 		repo,
@@ -97,7 +97,7 @@ func (a *GithubAPI) Milestones(project string) ([]*Milestone, error) {
 	var someday *Milestone
 
 	for _, milestone := range milestones {
-		a.opts.Logger.Debugf("  found milestone: (%d) %s %v", *milestone.Number, *milestone.Title, milestone.DueOn)
+		logger.Debugf("  found milestone: (%d) %s %v", *milestone.Number, *milestone.Title, milestone.DueOn)
 		if current == nil && milestone.DueOn != nil {
 			if (*milestone.DueOn).After(time.Now()) {
 				current = &Milestone{
@@ -105,7 +105,7 @@ func (a *GithubAPI) Milestones(project string) ([]*Milestone, error) {
 					Title:  *milestone.Title,
 					DueOn:  milestone.DueOn,
 				}
-				a.opts.Logger.Debugln("    using as Current")
+				logger.Debugln("    using as Current")
 			}
 		} else if milestone.DueOn == nil {
 			if *milestone.Title == a.config.NextMilestone {
@@ -113,14 +113,14 @@ func (a *GithubAPI) Milestones(project string) ([]*Milestone, error) {
 					Number: *milestone.Number,
 					Title:  *milestone.Title,
 				}
-				a.opts.Logger.Debugln("    using as Next")
+				logger.Debugln("    using as Next")
 			}
 			if *milestone.Title == a.config.SomedayMilestone {
 				someday = &Milestone{
 					Number: *milestone.Number,
 					Title:  *milestone.Title,
 				}
-				a.opts.Logger.Debugln("    using as Someday")
+				logger.Debugln("    using as Someday")
 			}
 		}
 	}
@@ -148,7 +148,7 @@ func cmdShowMilestones(opts *Options) error {
 	for _, project := range config.Projects {
 		milestones, err := api.Milestones(project)
 		if err != nil {
-			opts.Logger.Errorln(err)
+			logger.Errorln(err)
 		}
 		out[project] = milestones
 
@@ -198,7 +198,7 @@ func cmdSetMilestones(opts *Options, target string) error {
 	}
 
 	for _, project := range projects {
-		opts.Logger.Debugln("Setting milestones for:", project)
+		logger.Debugln("Setting milestones for:", project)
 
 		owner, repo, err := ownerRepo(project)
 		if err != nil {
@@ -219,12 +219,12 @@ func cmdSetMilestones(opts *Options, target string) error {
 		for _, ours := range ourMilestones {
 			for _, theirs := range theirMilestonesList {
 				if ours == theirs {
-					opts.Logger.Debugln("  found existing:", ours)
+					logger.Debugln("  found existing:", ours)
 					continue OurMilestones
 				}
 			}
 			// if we got here we didn't match, create a milestone
-			opts.Logger.Debugln("  creating:", ours)
+			logger.Debugln("  creating:", ours)
 			_, _, err := client.Issues.CreateMilestone(owner, repo, &github.Milestone{Title: &ours})
 			if err != nil {
 				return err
@@ -279,7 +279,7 @@ func cmdCreateMilestone(opts *Options, target, due, title string) error {
 	}
 
 	for _, project := range projects {
-		opts.Logger.Debugln("Creating milestone for:", project)
+		logger.Debugln("Creating milestone for:", project)
 
 		owner, repo, err := ownerRepo(project)
 		if err != nil {
@@ -287,7 +287,7 @@ func cmdCreateMilestone(opts *Options, target, due, title string) error {
 		}
 
 		// if we got here we didn't match, create a milestone
-		opts.Logger.Debugf("  creating: %s (%v)", title, due)
+		logger.Debugf("  creating: %s (%v)", title, due)
 		_, _, err = client.Issues.CreateMilestone(owner, repo, &github.Milestone{Title: &title, DueOn: &date})
 		if err != nil {
 			return err

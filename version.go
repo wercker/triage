@@ -1,11 +1,18 @@
 package main
 
+import (
+	"fmt"
+	"os"
+
+	"github.com/codegangsta/cli"
+)
+
 var (
 	// GitCommit is the git commit hash associated with this build.
 	GitCommit = ""
 
 	// MajorVersion is the semver major version.
-	MajorVersion = "1"
+	MajorVersion = "0"
 
 	// MinorVersion is the semver minor version.
 	MinorVersion = "0"
@@ -16,4 +23,30 @@ var (
 
 	// Compiled is the unix timestamp when this binary got compiled.
 	Compiled = ""
+
+	versionCommand = cli.Command{
+		Name:  "version",
+		Usage: "print version",
+		Action: func(c *cli.Context) {
+			opts, err := NewOptions(c)
+			if err != nil {
+				logger.Errorln("Invalid options", err)
+				os.Exit(1)
+			}
+			err = cmdVersion(opts)
+			if err != nil {
+				panic(err)
+			}
+		},
+	}
 )
+
+func cmdVersion(opts *Options) error {
+	fmt.Println(Version())
+	return nil
+}
+
+// Version returns a semver compatible version for this build.
+func Version() string {
+	return fmt.Sprintf("%s.%s.%s", MajorVersion, MinorVersion, PatchVersion)
+}

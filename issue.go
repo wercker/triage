@@ -683,23 +683,51 @@ func (w *IssueWindow) Draw() {
 	}
 }
 
+// Base Window Impl
+type IssueSubwindow struct {
+	*TopIssueWindow
+}
+
+func (w *IssueSubwindow) Init() error {
+	return nil
+}
+
+func (w *IssueSubwindow) Draw(x, y, x1, y1 int) {
+}
+
+func (w *IssueSubwindow) HandleEvent(ev termbox.Event) (bool, error) {
+	return false, nil
+}
+
 // Top Level Window
 type TopIssueWindow struct {
-	Client *github.Client
-	Opts   *Options
-	Config *Config
-	API    API
-	Target string
-	Filter string
-	Focus  IWindow
+	Client      *github.Client
+	Opts        *Options
+	Config      *Config
+	API         API
+	Target      string
+	Filter      string
+	Status      string
+	Focus       IWindow
+	ContextMenu IWindow
+
+	// Milestones are weird
+	Milestones map[string][]*Milestone
+	Priorities []Priority
+	Types      []Type
 
 	// Sub-Windows
-	Header      IWindow
-	Menu        IWindow
-	DefaultMenu IWindow
-	FilterMenu  IWindow
-	List        IWindow
-	Alert       IWindow
+	Header            IWindow
+	Menu              IWindow
+	DefaultMenu       IWindow
+	FilterLine        IWindow
+	List              IWindow
+	ListMenu          IWindow
+	ListMilestoneMenu IWindow
+	ListPriorityMenu  IWindow
+	ListTypeMenu      IWindow
+	Alert             IWindow
+	StatusLine        IWindow
 }
 
 func NewTopIssueWindow(client *github.Client, opts *Options, config *Config, api API, target string) *TopIssueWindow {
@@ -726,11 +754,42 @@ func (w *TopIssueWindow) Init() error {
 	}
 	w.Target = target
 
-	w.Header = NewIssueHeaderWindow(w)
-	w.List = NewIssueListWindow(w)
-	w.FilterMenu = NewIssueFilterWindow(w)
+	// build our milestones, priorities, types
+	milestones := map[string][]*Milestone{}
+	for _, project := range w.Config.Projects {
+		resp, err := w.API.Milestones(project)
+		if err == nil {
+			// NOTE(termie): ignoring this error in case people don't use milestones
+			//               code later on down the line should fail gracefully if
+			//               a milestone operation is attempted
+			milestones[project] = resp
+		}
+	}
+	w.Milestones = milestones
+	w.Priorities = w.Config.Priorities
+	w.Types = w.Config.Types
 
-	for _, win := range []IWindow{w.Header, w.List, w.FilterMenu} {
+	list := NewIssueListWindow(w)
+
+	w.Header = NewIssueHeaderWindow(w)
+	w.List = list
+	w.FilterLine = NewIssueFilterWindow(w)
+	w.StatusLine = NewIssueStatusWindow(w)
+	w.ListMenu = NewIssueListMenu(list)
+	w.ListMilestoneMenu = NewIssueListMilestoneMenu(list)
+	w.ListPriorityMenu = NewIssueListPriorityMenu(list)
+	w.ListTypeMenu = NewIssueListTypeMenu(list)
+
+	for _, win := range []IWindow{
+		w.Header,
+		w.List,
+		w.ListMenu,
+		w.ListMilestoneMenu,
+		w.ListPriorityMenu,
+		w.ListTypeMenu,
+		w.FilterLine,
+		w.StatusLine,
+	} {
 		err := win.Init()
 		if err != nil {
 			return err
@@ -744,14 +803,20 @@ func (w *TopIssueWindow) Init() error {
 
 	// // Start with the list focused
 	w.Focus = w.List
+	w.ContextMenu = w.ListMenu
 	return nil
 }
 
 func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
+	w.Status = ""
 	w.Header.Draw(x, y, x1, y)
 	// w.Menu.Draw(x, y+1, x1, y+2)
-	w.FilterMenu.Draw(x, y+3, x1, y+3)
-	w.List.Draw(x, y+4, x1, y1)
+	w.FilterLine.Draw(x, y+2, x1, y+2)
+	if w.ContextMenu != nil {
+		w.ContextMenu.Draw(x, y+3, x1, y+3)
+	}
+	w.List.Draw(x, y+4, x1, y1-1)
+	w.StatusLine.Draw(x, y1-1, x1, y1-1)
 }
 
 func (w *TopIssueWindow) HandleEvent(ev termbox.Event) (bool, error) {
@@ -771,12 +836,13 @@ func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 		switch ev.Key {
 		case termbox.KeyEsc:
 			w.Focus = w.List
+			w.ContextMenu = w.ListMenu
 			w.Filter = ""
 			return true, nil
 		default:
 			switch ev.Ch {
 			case '/':
-				w.Focus = w.FilterMenu
+				w.Focus = w.FilterLine
 				return true, nil
 			}
 		}
@@ -786,36 +852,37 @@ func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 
 // Header
 type IssueHeaderWindow struct {
-	*TopIssueWindow
+	*IssueSubwindow
 }
 
 func NewIssueHeaderWindow(w *TopIssueWindow) *IssueHeaderWindow {
-	return &IssueHeaderWindow{w}
-}
-
-func (w *IssueHeaderWindow) Init() error {
-	return nil
+	return &IssueHeaderWindow{&IssueSubwindow{w}}
 }
 
 func (w *IssueHeaderWindow) Draw(x, y, x1, y1 int) {
-	printLine(fmt.Sprintf("[triage] %s", w.Target), x, y)
+	printLine(fmt.Sprintf("*triage* %s", w.Target), x, y)
 }
 
-func (w *IssueHeaderWindow) HandleEvent(ev termbox.Event) (bool, error) {
-	return false, nil
+// Statusline
+type IssueStatusWindow struct {
+	*IssueSubwindow
 }
 
-// FilterMenu
+func NewIssueStatusWindow(w *TopIssueWindow) *IssueStatusWindow {
+	return &IssueStatusWindow{&IssueSubwindow{w}}
+}
+
+func (w *IssueStatusWindow) Draw(x, y, x1, y1 int) {
+	printLine(fmt.Sprintf("[%s", w.Status), x, y)
+}
+
+// Filter
 type IssueFilterWindow struct {
-	*TopIssueWindow
+	*IssueSubwindow
 }
 
 func NewIssueFilterWindow(w *TopIssueWindow) *IssueFilterWindow {
-	return &IssueFilterWindow{w}
-}
-
-func (w *IssueFilterWindow) Init() error {
-	return nil
+	return &IssueFilterWindow{&IssueSubwindow{w}}
 }
 
 func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
@@ -823,7 +890,7 @@ func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
 	if w.Focus == w {
 		cursor = ">"
 	}
-	printLine(fmt.Sprintf("%sfilter: %s", cursor, w.Filter), x, y)
+	printLine(fmt.Sprintf("%s [/] filter: %s", cursor, w.Filter), x, y)
 }
 
 func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
@@ -834,6 +901,7 @@ func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 			fallthrough
 		case termbox.KeyEsc:
 			w.Focus = w.List
+			w.ContextMenu = w.ListMenu
 			return true, nil
 		case termbox.KeyBackspace:
 			// Backspace starts clearing our filter
@@ -841,22 +909,232 @@ func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 				w.Filter = w.Filter[:len(w.Filter)-1]
 			}
 			return true, nil
+		case termbox.KeySpace:
+			w.Filter += " "
+			return true, nil
 		default:
-			// Add to the filter
-			switch ev.Key {
-			case termbox.KeySpace:
-				w.Filter += " "
+			switch ev.Ch {
+			case 0:
+			case ' ':
 			default:
-				switch ev.Ch {
-				case 0:
-				case ' ':
-				default:
-					w.Filter += string(ev.Ch)
-				}
+				w.Filter += string(ev.Ch)
+				return true, nil
 			}
 		}
 	}
 	return false, nil
+}
+
+// IssueListMenu
+type IssueListMenu struct {
+	*IssueListWindow
+}
+
+func NewIssueListMenu(w *IssueListWindow) *IssueListMenu {
+	return &IssueListMenu{w}
+}
+
+func (w *IssueListMenu) Draw(x, y, x1, y1 int) {
+	printLine("[m] milestone [p] priority [t] type", x+2, y)
+}
+
+func (w *IssueListMenu) HandleEvent(ev termbox.Event) (bool, error) {
+	switch ev.Type {
+	case termbox.EventKey:
+		switch ev.Key {
+		default:
+			switch ev.Ch {
+			case 'm':
+				w.ContextMenu = w.ListMilestoneMenu
+				return true, nil
+			case 'p':
+				w.ContextMenu = w.ListPriorityMenu
+				return true, nil
+			case 't':
+				w.ContextMenu = w.ListTypeMenu
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// IssueListMilestoneMenu
+type IssueListMilestoneMenu struct {
+	*IssueListWindow
+}
+
+func NewIssueListMilestoneMenu(w *IssueListWindow) *IssueListMilestoneMenu {
+	return &IssueListMilestoneMenu{w}
+}
+
+func (w *IssueListMilestoneMenu) Draw(x, y, x1, y1 int) {
+	printLine("milestone: [1] current [2] next [3] someday", x+2, y)
+}
+
+func (w *IssueListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
+	issue := w.currentIssues[w.currentIndex]
+	milestones := w.Milestones[issue.Project]
+	if milestones == nil {
+		// TODO(termie): display error/warning
+		return false, nil
+	}
+
+	var milestone *Milestone
+	var index int
+	switch ev.Ch {
+	case '1':
+		// set current milestone
+		index = 1
+		milestone = milestones[0]
+	case '2':
+		// set next milestone
+		index = 2
+		milestone = milestones[1]
+	case '3':
+		// set someday milestone
+		index = 3
+		milestone = milestones[2]
+	default:
+		return false, nil
+	}
+
+	_, _, err := w.Client.Issues.Edit(issue.Owner, issue.Repo, issue.Number, &github.IssueRequest{Milestone: &milestone.Number})
+	if err != nil {
+		return true, err
+	}
+
+	issue.Milestone = &IssueMilestone{Index: index, Milestone: milestone}
+	return true, nil
+
+}
+
+// IssueListPriorityMenu
+type IssueListPriorityMenu struct {
+	*IssueListWindow
+}
+
+func NewIssueListPriorityMenu(w *IssueListWindow) *IssueListPriorityMenu {
+	return &IssueListPriorityMenu{w}
+}
+
+func (w *IssueListPriorityMenu) Draw(x, y, x1, y1 int) {
+	menu := "priority:"
+	for i, p := range w.Priorities {
+		menu += fmt.Sprintf(" [%d] %s", i+1, p.Name)
+	}
+	printLine(menu, x+2, y)
+}
+
+func (w *IssueListPriorityMenu) HandleEvent(ev termbox.Event) (bool, error) {
+	issue := w.currentIssues[w.currentIndex]
+	labels := []string{}
+
+	// filter out any label that means a priority
+	for _, label := range issue.Labels {
+		found := false
+		for _, ours := range w.Priorities {
+			if label == ours.Name {
+				found = true
+			}
+		}
+		if !found {
+			labels = append(labels, label)
+		}
+	}
+
+	// now attempt to grab our label via the index keyed in
+	i, err := strconv.Atoi(fmt.Sprintf("%c", ev.Ch))
+	if err != nil {
+		// TODO(termie): warning
+		return false, nil
+	}
+
+	if i > len(w.Priorities) {
+		// TODO(termie): warning
+		return false, nil
+	}
+	var issuePriority IssuePriority
+	// a "0" will delete the label
+	if i > 0 {
+		pri := w.Priorities[i-1]
+		issuePriority = IssuePriority{Index: i, Priority: &pri}
+		labels = append(labels, pri.Name)
+	} else {
+		issuePriority = IssuePriority{Index: 0}
+	}
+
+	_, _, err = w.Client.Issues.ReplaceLabelsForIssue(issue.Owner, issue.Repo, issue.Number, labels)
+	if err != nil {
+		return true, err
+	}
+	issue.Priority = &issuePriority
+	issue.Labels = labels
+	return true, nil
+}
+
+// IssueListTypeMenu
+type IssueListTypeMenu struct {
+	*IssueListWindow
+}
+
+func NewIssueListTypeMenu(w *IssueListWindow) *IssueListTypeMenu {
+	return &IssueListTypeMenu{w}
+}
+
+func (w *IssueListTypeMenu) Draw(x, y, x1, y1 int) {
+	menu := "type:"
+	for i, p := range w.Types {
+		menu += fmt.Sprintf(" [%d] %s", i+1, p.Name)
+	}
+	printLine(menu, x+2, y)
+}
+
+func (w *IssueListTypeMenu) HandleEvent(ev termbox.Event) (bool, error) {
+	issue := w.currentIssues[w.currentIndex]
+	labels := []string{}
+
+	// filter out any label that means a priority
+	for _, label := range issue.Labels {
+		found := false
+		for _, ours := range w.Types {
+			if label == ours.Name {
+				found = true
+			}
+		}
+		if !found {
+			labels = append(labels, label)
+		}
+	}
+
+	// now attempt to grab our label via the index keyed in
+	i, err := strconv.Atoi(fmt.Sprintf("%c", ev.Ch))
+	if err != nil {
+		// TODO(termie): warning
+		return false, nil
+	}
+
+	if i > len(w.Types) {
+		// TODO(termie): warning
+		return false, nil
+	}
+	var issueType IssueType
+	// a "0" will delete the label
+	if i > 0 {
+		pri := w.Types[i-1]
+		issueType = IssueType{Index: i, Type: &pri}
+		labels = append(labels, pri.Name)
+	} else {
+		issueType = IssueType{Index: 0}
+	}
+
+	_, _, err = w.Client.Issues.ReplaceLabelsForIssue(issue.Owner, issue.Repo, issue.Number, labels)
+	if err != nil {
+		return true, err
+	}
+	issue.Type = &issueType
+	issue.Labels = labels
+	return true, nil
 }
 
 // Issue List
@@ -871,36 +1149,15 @@ type IssueListWindow struct {
 
 	currentFilter string
 
-	// Milestones are weird
-	milestones map[string][]*Milestone
-	priorities []Priority
-	types      []Type
-
-	*TopIssueWindow
+	*IssueSubwindow
 }
 
 func NewIssueListWindow(w *TopIssueWindow) *IssueListWindow {
-	return &IssueListWindow{TopIssueWindow: w}
+	return &IssueListWindow{IssueSubwindow: &IssueSubwindow{w}}
 }
 
 func (w *IssueListWindow) Init() error {
 	// fetch the initial list of issues, etc
-
-	// get our milestones
-	milestones := map[string][]*Milestone{}
-	for _, project := range w.Config.Projects {
-		resp, err := w.API.Milestones(project)
-		if err == nil {
-			// NOTE(termie): ignoring this error in case people don't use milestones
-			//               code later on down the line should fail gracefully if
-			//               a milestone operation is attempted
-			milestones[project] = resp
-		}
-	}
-	w.milestones = milestones
-	w.priorities = w.Config.Priorities
-	w.types = w.Config.Types
-
 	err := w.refresh()
 	if err != nil {
 		return err
@@ -918,7 +1175,7 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 	line := 0
 
 	//debug
-	printLine(fmt.Sprintf("ci: %d si: %d li: %d", w.currentIndex, w.scrollIndex, w.lastIndex), 1, 1)
+	w.Status += fmt.Sprintf(" ci: %d si: %d li: %d", w.currentIndex, w.scrollIndex, w.lastIndex)
 
 	if w.scrollIndex > 0 {
 		printLine("--more--", x+3, y)
@@ -951,7 +1208,7 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 			issue.Repo[:5],
 			issue.Number,
 			issue.Title,
-		), x+2, y+line)
+		), x, y+line)
 
 		// Check for expanded
 		if i == w.currentIndex && w.enableExpanding {
@@ -970,9 +1227,24 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 
 // HandleEvent is mostly movement events and triggering submenus
 func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
+	// Check the menu first
+	handled, err := w.ContextMenu.HandleEvent(ev)
+	if err != nil {
+		return true, err
+	}
+	if handled {
+		return true, nil
+	}
+	// Otherwise we'll handle the event
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
+		case termbox.KeyEsc:
+			if w.ContextMenu != w.ListMenu {
+				w.ContextMenu = w.ListMenu
+				return true, nil
+			}
+			return false, nil
 		case termbox.KeyPgdn:
 			w.scroll(10)
 			return true, nil
@@ -994,7 +1266,8 @@ func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 		case termbox.KeyArrowUp:
 			// if we're already at 0 and we hit up, go to the filter
 			if w.currentIndex == 0 {
-				w.Focus = w.FilterMenu
+				w.Focus = w.FilterLine
+				w.ContextMenu = nil
 				return true, nil
 			}
 			// move up
@@ -1023,7 +1296,7 @@ func (w *IssueListWindow) refresh() error {
 
 	issues := []*Issue{}
 	for _, issue := range rawIssues {
-		issues = append(issues, NewIssue(issue, w.milestones, w.priorities, w.types))
+		issues = append(issues, NewIssue(issue, w.Milestones, w.Priorities, w.Types))
 	}
 
 	if w.Opts.Debug {

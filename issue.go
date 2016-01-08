@@ -332,12 +332,48 @@ func (w *IssueHelpWindow) Draw(x, y, x1, y1 int) {
 		return
 	}
 
-	printLine("HELP HELP HELP", x, y)
-	printLine("HELP HELP HELP", x, y+1)
-	printLine("HELP HELP HELP", x, y+2)
-	printLine("HELP HELP HELP", x, y+3)
-	printLine("HELP HELP HELP", x, y+4)
-	printLine("HELP HELP HELP", x, y+5)
+	width, height := termbox.Size()
+	buffer := termbox.CellBuffer()
+	// dim the background
+	for ix := 0; ix < width; ix++ {
+		for iy := 0; iy < height; iy++ {
+			cell := buffer[iy*width+ix]
+			termbox.SetCell(ix, iy, cell.Ch, 235, cell.Bg)
+		}
+	}
+
+	// our overlay
+	overlay := `
+         **********************************************************************
+            ******************            ↳the current github search query
+              ↳sort +/- by a column
+   ↙  ↙  ↙   ↙
+  *** ****  ***  *****
+
+  ↙this number represents your milestone (0 means unassigned)
+  *
+   ↙this number represents your priority
+   *
+    ↙this number represents your type
+    *
+  *** ←together they are a sortable index, showing you the most relevant issues
+`
+	lines := strings.Split(overlay, "\n")
+	lines = lines[1:]
+	for iy, line := range lines {
+		for ix, c := range line {
+			fg := termbox.Attribute(5)
+			bg := termbox.ColorDefault
+			if c == '*' {
+				fg = termbox.ColorDefault | termbox.AttrUnderline
+				cell := buffer[iy*width+ix]
+				c = cell.Ch
+			} else if c == ' ' {
+				continue
+			}
+			termbox.SetCell(ix, iy, c, fg, bg)
+		}
+	}
 }
 
 func (w *IssueHelpWindow) HandleEvent(ev termbox.Event) (bool, error) {

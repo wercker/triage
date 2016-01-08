@@ -134,13 +134,16 @@ type IssueSubwindow struct {
 	*TopIssueWindow
 }
 
+// Init noop
 func (w *IssueSubwindow) Init() error {
 	return nil
 }
 
+// Draw noop
 func (w *IssueSubwindow) Draw(x, y, x1, y1 int) {
 }
 
+// HandleEvent noop
 func (w *IssueSubwindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
@@ -179,6 +182,7 @@ type TopIssueWindow struct {
 	StatusLine        Window
 }
 
+// NewTopIssueWindow ctor
 func NewTopIssueWindow(client *github.Client, opts *Options, config *Config, api API, target string) *TopIssueWindow {
 	return &TopIssueWindow{
 		Client: client,
@@ -189,6 +193,7 @@ func NewTopIssueWindow(client *github.Client, opts *Options, config *Config, api
 	}
 }
 
+// Init all of the subwindows
 func (w *TopIssueWindow) Init() error {
 	defer profile("TopIssueWindow.Init").Stop()
 
@@ -199,6 +204,8 @@ func (w *TopIssueWindow) Init() error {
 			for _, project := range w.Config.Projects {
 				target += fmt.Sprintf(" repo:%s", project)
 			}
+		} else {
+			return fmt.Errorf("No target specified and no projects configured, try `triage ui repo:owner/repo`")
 		}
 	} else {
 		target += fmt.Sprintf(" %s", w.Target)
@@ -262,6 +269,7 @@ func (w *TopIssueWindow) Init() error {
 	return nil
 }
 
+// Draw all the subwindows
 func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
 	w.Status = ""
 	w.Header.Draw(x, y, x1, y)
@@ -275,6 +283,7 @@ func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
 	w.Help.Draw(x, y, x1, y1)
 }
 
+// HandleEvent passes events to the subwindows
 func (w *TopIssueWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	handled, err := w.Focus.HandleEvent(ev)
 	if err != nil {
@@ -286,6 +295,7 @@ func (w *TopIssueWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return true, nil
 }
 
+// HandleGlobalEvent when the subwindows don't handle them
 func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -319,14 +329,18 @@ func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 }
 
 // Help
+
+// IssueHelpWindow displays help text
 type IssueHelpWindow struct {
 	*IssueSubwindow
 }
 
+// NewIssueHelpWindow ctor
 func NewIssueHelpWindow(w *TopIssueWindow) *IssueHelpWindow {
 	return &IssueHelpWindow{&IssueSubwindow{w}}
 }
 
+// Draw the help window
 func (w *IssueHelpWindow) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.Help {
 		return
@@ -376,6 +390,7 @@ func (w *IssueHelpWindow) Draw(x, y, x1, y1 int) {
 	}
 }
 
+// HandleEvent closes the window on any keypress
 func (w *IssueHelpWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -387,28 +402,36 @@ func (w *IssueHelpWindow) HandleEvent(ev termbox.Event) (bool, error) {
 }
 
 // Header
+
+// IssueHeaderWindow shows the title bar
 type IssueHeaderWindow struct {
 	*IssueSubwindow
 }
 
+// NewIssueHeaderWindow ctor
 func NewIssueHeaderWindow(w *TopIssueWindow) *IssueHeaderWindow {
 	return &IssueHeaderWindow{&IssueSubwindow{w}}
 }
 
+// Draw the titlebar
 func (w *IssueHeaderWindow) Draw(x, y, x1, y1 int) {
 	printLine(fmt.Sprintf("*triage* %s", w.Target), x, y)
 }
 
 // Statusline
+
+// IssueStatusWindow shows some extra info on the bottom of the screen
 type IssueStatusWindow struct {
 	*IssueSubwindow
 	Buffer string
 }
 
+// NewIssueStatusWindow ctor
 func NewIssueStatusWindow(w *TopIssueWindow) *IssueStatusWindow {
 	return &IssueStatusWindow{&IssueSubwindow{w}, ""}
 }
 
+// Draw the status line
 func (w *IssueStatusWindow) Draw(x, y, x1, y1 int) {
 	if w.Focus != w {
 		printLine(fmt.Sprintf("[:] %s", w.Status), x, y)
@@ -418,6 +441,7 @@ func (w *IssueStatusWindow) Draw(x, y, x1, y1 int) {
 	termbox.SetCursor(x+1+len(w.Buffer), y)
 }
 
+// HandleEvent for our vim-style exit keys
 func (w *IssueStatusWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -456,6 +480,7 @@ func (w *IssueStatusWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
+// execute the statusline for "q" and "wq"
 func (w *IssueStatusWindow) execute(s string) {
 	switch s {
 	case "q":
@@ -467,14 +492,18 @@ func (w *IssueStatusWindow) execute(s string) {
 }
 
 // Filter
+
+// IssueFilterWindow handles the filter box
 type IssueFilterWindow struct {
 	*IssueSubwindow
 }
 
+// NewIssueFilterWindow ctor
 func NewIssueFilterWindow(w *TopIssueWindow) *IssueFilterWindow {
 	return &IssueFilterWindow{&IssueSubwindow{w}}
 }
 
+// Draw and move the cursor to the filter box
 func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
 	cursor := " "
 	fg := termbox.ColorDefault
@@ -498,6 +527,7 @@ func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
 	// printLine(fmt.Sprintf("%s[/] filter: %s", cursor, w.Filter), x+1, y)
 }
 
+// HandleEvent builds the filter string
 func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -537,16 +567,20 @@ func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 }
 
 // Sort
+
+// IssueSortWindow handle the sort box and global menu
 type IssueSortWindow struct {
 	*IssueSubwindow
 
 	valid bool
 }
 
+// NewIssueSortWindow ctor
 func NewIssueSortWindow(w *TopIssueWindow) *IssueSortWindow {
 	return &IssueSortWindow{&IssueSubwindow{w}, false}
 }
 
+// Init sets up our initial sorting functions
 func (w *IssueSortWindow) Init() error {
 	// TODO(termie): allow sort to be specified in options
 	w.Sort = "+idx"
@@ -556,6 +590,7 @@ func (w *IssueSortWindow) Init() error {
 	return nil
 }
 
+// Draw and move the cursor to the sort box
 func (w *IssueSortWindow) Draw(x, y, x1, y1 int) {
 	cursor := " "
 	fg := termbox.ColorDefault
@@ -582,6 +617,7 @@ func (w *IssueSortWindow) Draw(x, y, x1, y1 int) {
 	printLine(" [?] help [^C] exit", x+30, y)
 }
 
+// HandleEvent builds the sort string
 func (w *IssueSortWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -656,19 +692,24 @@ func (w *IssueSortWindow) update(s string) {
 
 }
 
-// IssueListMenu
+// Context menus for the issue list
+
+// IssueListMenu is the default menu when issue list is focused
 type IssueListMenu struct {
 	*IssueListWindow
 }
 
+// NewIssueListMenu ctor
 func NewIssueListMenu(w *IssueListWindow) *IssueListMenu {
 	return &IssueListMenu{w}
 }
 
+// Init noop (needed to prevent IssueList.Init being called)
 func (w *IssueListMenu) Init() error {
 	return nil
 }
 
+// Draw the menu
 func (w *IssueListMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
@@ -682,6 +723,7 @@ func (w *IssueListMenu) Draw(x, y, x1, y1 int) {
 	printLine(fmt.Sprintf("[m] set milestone [p] set priority [t] set type [enter] %s", expand), x+2, y)
 }
 
+// HandleEvent for the menu
 func (w *IssueListMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
@@ -706,19 +748,22 @@ func (w *IssueListMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-// IssueListMilestoneMenu
+// IssueListMilestoneMenu for setting milestones
 type IssueListMilestoneMenu struct {
 	*IssueListWindow
 }
 
+// NewIssueListMilestoneMenu ctor
 func NewIssueListMilestoneMenu(w *IssueListWindow) *IssueListMilestoneMenu {
 	return &IssueListMilestoneMenu{w}
 }
 
+// Init noop (needed to prevent IssueList.Init being called)
 func (w *IssueListMilestoneMenu) Init() error {
 	return nil
 }
 
+// Draw the milestone menu
 func (w *IssueListMilestoneMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
@@ -726,6 +771,7 @@ func (w *IssueListMilestoneMenu) Draw(x, y, x1, y1 int) {
 	printLine("milestone: [1] current [2] next [3] someday", x+2, y)
 }
 
+// HandleEvent sets the milestone
 func (w *IssueListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	issue := w.currentIssues[w.currentIndex]
 	milestones := w.Milestones[issue.Project]
@@ -763,19 +809,22 @@ func (w *IssueListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
 
 }
 
-// IssueListPriorityMenu
+// IssueListPriorityMenu for setting priority
 type IssueListPriorityMenu struct {
 	*IssueListWindow
 }
 
+// NewIssueListPriorityMenu ctor
 func NewIssueListPriorityMenu(w *IssueListWindow) *IssueListPriorityMenu {
 	return &IssueListPriorityMenu{w}
 }
 
+// Init noop (needed to prevent IssueList.Init being called)
 func (w *IssueListPriorityMenu) Init() error {
 	return nil
 }
 
+// Draw the priority menu
 func (w *IssueListPriorityMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
@@ -788,6 +837,7 @@ func (w *IssueListPriorityMenu) Draw(x, y, x1, y1 int) {
 	printLine(menu, x+2, y)
 }
 
+// HandleEvent sets the priority
 func (w *IssueListPriorityMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	issue := w.currentIssues[w.currentIndex]
 	labels := []string{}
@@ -840,14 +890,17 @@ type IssueListTypeMenu struct {
 	*IssueListWindow
 }
 
+// NewIssueListTypeMenu ctor
 func NewIssueListTypeMenu(w *IssueListWindow) *IssueListTypeMenu {
 	return &IssueListTypeMenu{w}
 }
 
+// Init noop (needed to prevent IssueList.Init being called)
 func (w *IssueListTypeMenu) Init() error {
 	return nil
 }
 
+// Draw the type menu
 func (w *IssueListTypeMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
@@ -859,6 +912,7 @@ func (w *IssueListTypeMenu) Draw(x, y, x1, y1 int) {
 	printLine(menu, x+2, y)
 }
 
+// HandleEvent sets the type
 func (w *IssueListTypeMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	issue := w.currentIssues[w.currentIndex]
 	labels := []string{}
@@ -907,6 +961,8 @@ func (w *IssueListTypeMenu) HandleEvent(ev termbox.Event) (bool, error) {
 }
 
 // Issue List
+
+// IssueListWindow is the main list of issues
 type IssueListWindow struct {
 	issues        []*Issue
 	currentIssues []*Issue
@@ -920,10 +976,12 @@ type IssueListWindow struct {
 	*IssueSubwindow
 }
 
+// NewIssueListWindow ctor
 func NewIssueListWindow(w *TopIssueWindow) *IssueListWindow {
 	return &IssueListWindow{IssueSubwindow: &IssueSubwindow{w}}
 }
 
+// Init fetches the initial issues
 func (w *IssueListWindow) Init() error {
 	// fetch the initial list of issues, etc
 	err := w.refresh()
@@ -934,6 +992,7 @@ func (w *IssueListWindow) Init() error {
 	return nil
 }
 
+// Draw the header and list of issues
 func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 	w.filter(w.Filter)
 	w.sort()
@@ -1069,7 +1128,7 @@ func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-// refreshIssues updates all the issues for the current query
+// refresh updates all the issues for the current query
 func (w *IssueListWindow) refresh() error {
 	defer profile("IssueListWindow.refresh").Stop()
 	rawIssues, err := w.API.Search(w.Target)
@@ -1117,7 +1176,7 @@ func (w *IssueListWindow) filter(substr string) {
 
 IssueLoop:
 	for _, issue := range w.issues {
-		haystack := fmt.Sprintf("%s %s %s m%d p%d t%d", issue.Number, issue.Repo, issue.Title, issue.Milestone.Index, issue.Priority.Index, issue.Type.Index)
+		haystack := fmt.Sprintf("%d %s %s m%d p%d t%d", issue.Number, issue.Repo, issue.Title, issue.Milestone.Index, issue.Priority.Index, issue.Type.Index)
 		for _, label := range issue.Labels {
 			haystack += fmt.Sprintf(" %s", label)
 		}

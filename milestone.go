@@ -24,7 +24,7 @@ var (
 			}
 			err = cmdShowMilestones(opts)
 			if err != nil {
-				panic(err)
+				SoftExit(opts, err)
 			}
 		},
 	}
@@ -40,7 +40,7 @@ var (
 			project := c.Args().First()
 			err = cmdSetMilestones(opts, project)
 			if err != nil {
-				panic(err)
+				SoftExit(opts, err)
 			}
 		},
 	}
@@ -58,7 +58,7 @@ var (
 			title := c.String("title")
 			err = cmdCreateMilestone(opts, project, due, title)
 			if err != nil {
-				panic(err)
+				SoftExit(opts, err)
 			}
 		},
 		Flags: []cli.Flag{

@@ -24,7 +24,7 @@ var (
 			project := c.Args().First()
 			err = cmdShowLabels(opts, project)
 			if err != nil {
-				panic(err)
+				SoftExit(opts, err)
 			}
 		},
 	}
@@ -40,7 +40,7 @@ var (
 			project := c.Args().First()
 			err = cmdSetLabels(opts, project)
 			if err != nil {
-				panic(err)
+				SoftExit(opts, err)
 			}
 		},
 	}

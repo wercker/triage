@@ -5,6 +5,7 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
+// Window is the basic interface for things that draw on the screen
 type Window interface {
 	Init() error
 	Draw(x, y, x1, y1 int)

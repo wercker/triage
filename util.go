@@ -25,11 +25,13 @@ func wordWrap(text string, length int) []string {
 	return strings.Split(s, "\n")
 }
 
+// Profiler gets us timing numbers
 type Profiler struct {
 	name  string
 	start time.Time
 }
 
+// Stop the profiler and log the timing
 func (p *Profiler) Stop() {
 	now := time.Now()
 	d := now.Sub(p.start)

@@ -41,31 +41,41 @@ How To Use
 What you'll see is a list of all the open issues (sorted by number until you
 start prioritizing things).
 
+Hit "?" for help, it's super cool.
+
 You can scroll through them with up/down, esc and left will back you out of
 things.
 
 When the cursor is over the filter, you can quick filter by typing stuff.
 
+When the cursor is over the sort, you can type the name of a column to sort.
+
 When the cursor is over an issue there are some menu options showing hotkeys.
 If, for example, you hit "p" then scroll through them you can hit "1" to mark
 the current issue with priority Blocker, "2" for Critical and so on.
 
-F5 will force a refresh.
-
-Ctrl-C exits, as does typing ":q" or ":wq" into the filter field.
+Ctrl-C exits, as do typing ":q" or ":wq" and hitting enter.
 
 You can put config information in `triage.yml`, and eventually TODO(termie) in
 something like .triage/config
 
--------------
-Sorting Order
--------------
+-----------------
+IDX Sorting Order
+-----------------
 
 In ascending order, it will show:
 
  1. Anything with priority 1 (defaults to "blocker")
  2. Items sorted by Milestone > Priority > Type
  3. In the event of a tie, lowest issue number
+
+
+-----------------
+Filtering Helpers
+-----------------
+
+There are a bunch of things being searched for, try `p2` to see all your
+priority 2 issues, `m1 p2 t3 la` for all your milestone 1, priority 2, type 3 issues that have an "la" somewhere in the title. The issue number and repo are also in there.
 
 -------------
 Caveat Emptor

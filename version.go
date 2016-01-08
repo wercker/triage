@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/codegangsta/cli"
 )
@@ -28,23 +27,10 @@ var (
 		Name:  "version",
 		Usage: "print version",
 		Action: func(c *cli.Context) {
-			opts, err := NewOptions(c)
-			if err != nil {
-				logger.Errorln("Invalid options", err)
-				os.Exit(1)
-			}
-			err = cmdVersion(opts)
-			if err != nil {
-				panic(err)
-			}
+			fmt.Println(Version())
 		},
 	}
 )
-
-func cmdVersion(opts *Options) error {
-	fmt.Println(Version())
-	return nil
-}
 
 // Version returns a semver compatible version for this build.
 func Version() string {

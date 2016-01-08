@@ -37,8 +37,6 @@ build:
 
 deploy:
   steps:
-    - install-packages:
-        packages: zip gzip tar
     - script:
         name: version
         code: export TRIAGE_VERSION=$(./linux-amd64/triage version)

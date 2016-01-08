@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -13,10 +14,10 @@ import (
 )
 
 var (
-	logger = logrus.New()
+	logger    = logrus.New()
 	uiCommand = cli.Command{
 		Name:  "ui",
-		Usage: "go into termbox mode",
+		Usage: "run the triage ui",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {
@@ -26,11 +27,19 @@ var (
 			target := c.Args().First()
 			err = cmdUI(opts, target)
 			if err != nil {
-				panic(err)
+				SoftExit(opts, err)
 			}
 		},
 	}
 )
+
+func SoftExit(opts *Options, err error) {
+	if opts.Debug {
+		panic(err)
+	}
+	logger.Errorln(err.Error())
+	os.Exit(1)
+}
 
 // Options are our global options
 type Options struct {
@@ -43,6 +52,11 @@ func NewOptions(c *cli.Context) (*Options, error) {
 	debug := c.GlobalBool("debug")
 	if debug {
 		logger.Level = logrus.DebugLevel
+	}
+
+	apiToken := c.GlobalString("api-token")
+	if apiToken == "" {
+		return nil, fmt.Errorf("No API token found, please set GITHUB_API_TOKEN or --api-token")
 	}
 
 	return &Options{
@@ -61,6 +75,14 @@ func AuthClient(opts *Options) *http.Client {
 }
 
 func cmdUI(opts *Options, target string) error {
+	f, err := os.Create("triage.log")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	defer func() { logger.Out = os.Stdout }()
+	logger.Out = f
+
 	if err := termbox.Init(); err != nil {
 		return err
 	}
@@ -78,7 +100,7 @@ func cmdUI(opts *Options, target string) error {
 		return err
 	}
 
-	issueWindow := NewIssueWindow(client, opts, config, api, target)
+	issueWindow := NewTopIssueWindow(client, opts, config, api, target)
 	if err := issueWindow.Init(); err != nil {
 		return err
 	}
@@ -111,25 +133,33 @@ TermLoop:
 	return nil
 }
 
-func printLine(str string, x int, y int) {
+func printLine(str string, x, y int) {
 	for i := range str {
 		termbox.SetCell(x+i, y, rune(str[i]), termbox.ColorDefault, termbox.ColorDefault)
 	}
 }
 
-func drawAll(c *Console) {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-
-	c.CurrentWindow.Draw()
-
-	termbox.Flush()
+func printLineColor(str string, x, y int, fg, bg termbox.Attribute) {
+	for i := range str {
+		termbox.SetCell(x+i, y, rune(str[i]), fg, bg)
+	}
 }
+
+// func drawAll(c *Console) {
+//   termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+
+//   c.CurrentWindow.Draw()
+
+//   termbox.Flush()
+// }
 
 func main() {
 	app := cli.NewApp()
 	app.Author = "termie"
 	app.Name = "triage"
-	app.Usage = ""
+	app.Usage = "cross-project issue management for github"
+	// app.Usage = ""
+	app.Version = Version()
 	app.Commands = []cli.Command{
 		uiCommand,
 		showLabelsCommand,

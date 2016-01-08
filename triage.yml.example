@@ -1,0 +1,26 @@
+next-milestone: Next
+someday-milestone: Someday
+
+projects:
+  - wercker/sentcli
+  - wercker/kiddie-pool
+
+types:
+  - name: bug
+    color: f7c6c7
+  - name: task
+    color: fef2c0
+  - name: enhancement
+    color: bfe5bf
+  - name: question
+    color: c7def8
+
+priorities:
+  - name: blocker
+    color: e11d21
+  - name: critical
+    color: eb6420
+  - name: normal
+    color: fbca04
+  - name: low
+    color: "009800"

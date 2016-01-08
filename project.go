@@ -23,7 +23,7 @@ var (
 			target := c.Args().First()
 			err = cmdShowProjects(opts, target)
 			if err != nil {
-				panic(err)
+				SoftExit(opts, err)
 			}
 		},
 	}

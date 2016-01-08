@@ -118,9 +118,15 @@ TermLoop:
 	return nil
 }
 
-func printLine(str string, x int, y int) {
+func printLine(str string, x, y int) {
 	for i := range str {
 		termbox.SetCell(x+i, y, rune(str[i]), termbox.ColorDefault, termbox.ColorDefault)
+	}
+}
+
+func printLineColor(str string, x, y int, fg, bg termbox.Attribute) {
+	for i := range str {
+		termbox.SetCell(x+i, y, rune(str[i]), fg, bg)
 	}
 }
 

@@ -33,6 +33,7 @@ func NewConsole(client *github.Client) *Console {
 
 // Init sets up the outer console
 func (c *Console) Init() error {
+	termbox.SetOutputMode(termbox.Output256)
 	return nil
 }
 

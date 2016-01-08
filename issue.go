@@ -953,10 +953,25 @@ func NewIssueFilterWindow(w *TopIssueWindow) *IssueFilterWindow {
 
 func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
 	cursor := " "
+	fg := termbox.ColorDefault
+	bg := termbox.ColorDefault
 	if w.Focus == w {
 		cursor = ">"
+		fg = 0xe9
+		bg = 0xfa
 	}
-	printLine(fmt.Sprintf("%s[/] filter: %s", cursor, w.Filter), x+1, y)
+	pre := fmt.Sprintf("%s[/] filter: ", cursor)
+
+	printLine(pre, x+1, y)
+	printLineColor(w.Filter, x+1+len(pre), y, fg, bg)
+	if w.Focus == w {
+		for i := x + 1 + len(pre) + len(w.Filter); i < 60; i++ {
+			termbox.SetCell(x+i, y, ' ', fg, bg)
+			termbox.SetCursor(x+1+len(pre)+len(w.Filter), y)
+		}
+	}
+
+	// printLine(fmt.Sprintf("%s[/] filter: %s", cursor, w.Filter), x+1, y)
 }
 
 func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
@@ -964,12 +979,14 @@ func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	case termbox.EventKey:
 		switch ev.Key {
 		case termbox.KeyArrowUp:
+			termbox.HideCursor()
 			w.Focus = w.SortLine
 			w.ContextMenu = nil
 			return true, nil
 		case termbox.KeyArrowDown:
 			fallthrough
 		case termbox.KeyEsc:
+			termbox.HideCursor()
 			w.Focus = w.List
 			w.ContextMenu = w.ListMenu
 			return true, nil
@@ -1006,10 +1023,23 @@ func NewIssueSortWindow(w *TopIssueWindow) *IssueSortWindow {
 
 func (w *IssueSortWindow) Draw(x, y, x1, y1 int) {
 	cursor := " "
+	fg := termbox.ColorDefault
+	bg := termbox.ColorDefault
 	if w.Focus == w {
 		cursor = ">"
+		fg = 0xe9
+		bg = 0xfa
 	}
-	printLine(fmt.Sprintf("%s[s] sort: %s", cursor, w.Sort), x+1, y)
+	pre := fmt.Sprintf("%s[s] sort: ", cursor)
+
+	printLine(pre, x+1, y)
+	printLineColor(w.Sort, x+1+len(pre), y, fg, bg)
+	if w.Focus == w {
+		for i := x + 1 + len(pre) + len(w.Sort); i < 60; i++ {
+			termbox.SetCell(x+i, y, ' ', fg, bg)
+			termbox.SetCursor(x+1+len(pre)+len(w.Sort), y)
+		}
+	}
 }
 
 func (w *IssueSortWindow) HandleEvent(ev termbox.Event) (bool, error) {

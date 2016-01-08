@@ -5,25 +5,16 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
-// Window interface for basic window functionality
 type Window interface {
 	Init() error
-	Draw()
-	SetBounds(x1, y1, x2, y2 int)
-	HandleEvent(termbox.Event)
-}
-
-type IWindow interface {
-	Init() error
 	Draw(x, y, x1, y1 int)
-	// SetBounds(x1, y1, x2, y2 int)
 	HandleEvent(termbox.Event) (bool, error)
 }
 
 // Console implements the outer level of console interaction
 type Console struct {
-	Windows       []IWindow
-	CurrentWindow IWindow
+	Windows       []Window
+	CurrentWindow Window
 }
 
 // NewConsole constructor
@@ -48,7 +39,7 @@ func (c *Console) Draw() error {
 }
 
 // AddWindow in case we ever have more than one?
-func (c *Console) AddWindow(w IWindow) {
+func (c *Console) AddWindow(w Window) {
 	c.Windows = append(c.Windows, w)
 	// w.SetBounds(0, 0, width, height)
 	if c.CurrentWindow == nil {

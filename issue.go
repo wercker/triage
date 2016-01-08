@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -154,8 +155,8 @@ type TopIssueWindow struct {
 	Sort        string
 	Filter      string
 	Status      string
-	Focus       IWindow
-	ContextMenu IWindow
+	Focus       Window
+	ContextMenu Window
 	SortFunc    func(*Issue, *Issue) bool
 	SortAsc     bool
 
@@ -165,17 +166,17 @@ type TopIssueWindow struct {
 	Types      []Type
 
 	// Sub-Windows
-	Help              IWindow
-	Header            IWindow
-	FilterLine        IWindow
-	SortLine          IWindow
-	List              IWindow
-	ListMenu          IWindow
-	ListMilestoneMenu IWindow
-	ListPriorityMenu  IWindow
-	ListTypeMenu      IWindow
-	Alert             IWindow
-	StatusLine        IWindow
+	Help              Window
+	Header            Window
+	FilterLine        Window
+	SortLine          Window
+	List              Window
+	ListMenu          Window
+	ListMilestoneMenu Window
+	ListPriorityMenu  Window
+	ListTypeMenu      Window
+	Alert             Window
+	StatusLine        Window
 }
 
 func NewTopIssueWindow(client *github.Client, opts *Options, config *Config, api API, target string) *TopIssueWindow {
@@ -232,7 +233,7 @@ func (w *TopIssueWindow) Init() error {
 	w.ListPriorityMenu = NewIssueListPriorityMenu(list)
 	w.ListTypeMenu = NewIssueListTypeMenu(list)
 
-	for _, win := range []IWindow{
+	for _, win := range []Window{
 		w.Help,
 		w.Header,
 		w.List,
@@ -308,6 +309,9 @@ func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 			case '?':
 				w.Focus = w.Help
 				return true, nil
+			case ':':
+				w.Focus = w.StatusLine
+				return true, nil
 			}
 		}
 	}
@@ -362,14 +366,68 @@ func (w *IssueHeaderWindow) Draw(x, y, x1, y1 int) {
 // Statusline
 type IssueStatusWindow struct {
 	*IssueSubwindow
+	Buffer string
 }
 
 func NewIssueStatusWindow(w *TopIssueWindow) *IssueStatusWindow {
-	return &IssueStatusWindow{&IssueSubwindow{w}}
+	return &IssueStatusWindow{&IssueSubwindow{w}, ""}
 }
 
 func (w *IssueStatusWindow) Draw(x, y, x1, y1 int) {
-	printLine(fmt.Sprintf("[%s", w.Status), x, y)
+	if w.Focus != w {
+		printLine(fmt.Sprintf("[:] %s", w.Status), x, y)
+		return
+	}
+	printLine(fmt.Sprintf(":%s", w.Buffer), x, y)
+	termbox.SetCursor(x+1+len(w.Buffer), y)
+}
+
+func (w *IssueStatusWindow) HandleEvent(ev termbox.Event) (bool, error) {
+	switch ev.Type {
+	case termbox.EventKey:
+		switch ev.Key {
+		case termbox.KeyEsc:
+			termbox.HideCursor()
+			w.Focus = w.List
+			w.ContextMenu = w.ListMenu
+			return true, nil
+		case termbox.KeyBackspace:
+			// Backspace starts clearing our filter
+			if len(w.Buffer) > 0 {
+				w.Buffer = w.Buffer[:len(w.Buffer)-1]
+				return true, nil
+			}
+			termbox.HideCursor()
+			w.Focus = w.List
+			w.ContextMenu = w.ListMenu
+			return true, nil
+		case termbox.KeySpace:
+			w.Buffer += " "
+			return true, nil
+		case termbox.KeyEnter:
+			w.execute(w.Buffer)
+			return true, nil
+		default:
+			switch ev.Ch {
+			case 0:
+			case ' ':
+			default:
+				w.Buffer += string(ev.Ch)
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func (w *IssueStatusWindow) execute(s string) {
+	switch s {
+	case "q":
+		fallthrough
+	case "wq":
+		termbox.Close()
+		os.Exit(0)
+	}
 }
 
 // Filter

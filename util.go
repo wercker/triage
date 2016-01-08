@@ -2,7 +2,10 @@ package main
 
 import (
 	"os"
+	"strings"
 	"time"
+
+	"github.com/mitchellh/go-wordwrap"
 )
 
 // exists is like python's os.path.exists and too many lines in Go
@@ -15,6 +18,11 @@ func exists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func wordWrap(text string, length int) []string {
+	s := wordwrap.WrapString(text, uint(length))
+	return strings.Split(s, "\n")
 }
 
 type Profiler struct {

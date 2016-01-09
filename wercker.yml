@@ -7,7 +7,7 @@ dev:
 build:
   steps:
     - setup-go-workspace:
-      package-dir: github.com/wercker/triage
+        package-dir: github.com/wercker/triage
     - glide-install
     - script:
         name: go vet

@@ -21,6 +21,8 @@ Add it to your env as GITHUB_TOKEN
 How To Build
 ------------
 
+PRO TIP: https://github.com/wercker/triage/releases
+
 N.B. I'm using a really old glide for various purposes, if all else fails the
 glide.yaml has a list of the packages you need.
 

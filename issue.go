@@ -594,6 +594,7 @@ func (w *AlertWindow) Draw(x, y, x1, y1 int) {
 	}
 
 	lines := strings.Split(w.Alert, "\n")
+	lines = append(lines, "<any key to dismiss>")
 	// find a center
 	maxWidth := 1
 	maxHeight := len(lines)
@@ -604,8 +605,6 @@ func (w *AlertWindow) Draw(x, y, x1, y1 int) {
 	}
 	startX := (width / 2) - (maxWidth / 2)
 	startY := (height / 2) - (maxHeight / 2)
-
-	logger.Debugf("startX: %d startY: %d\n", startX, startY)
 
 	for iy, line := range lines {
 		for ix, c := range line {
@@ -623,6 +622,7 @@ func (w *AlertWindow) Draw(x, y, x1, y1 int) {
 func (w *AlertWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
+		w.Alert = ""
 		w.Focus = w.List
 		w.ContextMenu = w.ListMenu
 		return true, nil
@@ -1014,6 +1014,9 @@ func (w *ListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	milestones := w.Milestones[issue.Project]
 	if milestones == nil {
 		// TODO(termie): display error/warning
+		logger.Warnln("Couldn't find milestones for:", issue.Project)
+		w.Alert = fmt.Sprintf("Couldn't find valid milestones for: %s", issue.Project)
+		w.Focus = w.AlertModal
 		return false, nil
 	}
 
@@ -1035,6 +1038,7 @@ func (w *ListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	default:
 		return false, nil
 	}
+
 
 	_, _, err := w.Client.Issues.Edit(issue.Owner, issue.Repo, issue.Number, &github.IssueRequest{Milestone: &milestone.Number})
 	if err != nil {
@@ -1318,13 +1322,23 @@ func (w *ListWindow) Draw(x, y, x1, y1 int) {
 
 // HandleEvent is mostly movement events and triggering submenus
 func (w *ListWindow) HandleEvent(ev termbox.Event) (bool, error) {
-	// Check the menu first
-	handled, err := w.ContextMenu.HandleEvent(ev)
+	// Check the list menu first
+	handled, err := w.ListMenu.HandleEvent(ev)
 	if err != nil {
 		return true, err
 	}
 	if handled {
 		return true, nil
+	}
+	// then the context
+	if w.ContextMenu != w.ListMenu {
+		handled, err := w.ContextMenu.HandleEvent(ev)
+		if err != nil {
+			return true, err
+		}
+		if handled {
+			return true, nil
+		}
 	}
 	// Otherwise we'll handle the event
 	switch ev.Type {

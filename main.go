@@ -30,6 +30,9 @@ var (
 				SoftExit(opts, err)
 			}
 		},
+		Flags: []cli.Flag{
+			cli.StringFlag{Name: "org", Usage: "list by org"},
+		},
 	}
 )
 
@@ -45,6 +48,7 @@ func SoftExit(opts *Options, err error) {
 type Options struct {
 	APIToken string
 	Debug    bool
+	CLI      *cli.Context
 }
 
 // NewOptions constructor
@@ -62,6 +66,7 @@ func NewOptions(c *cli.Context) (*Options, error) {
 	return &Options{
 		APIToken: c.GlobalString("api-token"),
 		Debug:    debug,
+		CLI:      c,
 	}, nil
 }
 
@@ -106,9 +111,9 @@ func cmdUI(opts *Options, target string) error {
 	}
 	c.AddWindow(issueWindow)
 
-	if err := c.Draw(); err != nil {
-		return err
-	}
+	// if err := issueWidnow.Redraw(); err != nil {
+	//   return err
+	// }
 
 TermLoop:
 	for {
@@ -119,14 +124,10 @@ TermLoop:
 				break TermLoop
 			default:
 				c.CurrentWindow.HandleEvent(ev)
-				if err := c.Draw(); err != nil {
-					return err
-				}
+				issueWindow.Redraw()
 			}
 		case termbox.EventResize:
-			if err := c.Draw(); err != nil {
-				return err
-			}
+			issueWindow.Redraw()
 		}
 	}
 

@@ -29,16 +29,6 @@ func (c *Console) Init() error {
 	return nil
 }
 
-// Draw the curent window
-func (c *Console) Draw() error {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-
-	width, height := termbox.Size()
-	c.CurrentWindow.Draw(0, 0, width, height)
-	termbox.Flush()
-	return nil
-}
-
 // AddWindow in case we ever have more than one?
 func (c *Console) AddWindow(w Window) {
 	c.Windows = append(c.Windows, w)

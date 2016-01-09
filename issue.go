@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/go-github/github"
 	"github.com/nsf/termbox-go"
@@ -46,11 +47,20 @@ type IssueType struct {
 	*Type
 }
 
+type issueResult struct {
+	Issues []github.Issue
+	Err    error
+}
+
 // NewIssue constructor for an Issue from a github.Issue
 func NewIssue(issue github.Issue, ms map[string][]*Milestone, ps []Priority, ts []Type) *Issue {
 	number := *issue.Number
 	title := *issue.Title
-	body := *issue.Body
+	body := ""
+	if issue.Body != nil {
+
+		body = *issue.Body
+	}
 	url := *issue.HTMLURL
 	owner, repo, _ := ownerRepoFromURL(url)
 	project := fmt.Sprintf("%s/%s", owner, repo)
@@ -116,17 +126,78 @@ func NewIssue(issue github.Issue, ms map[string][]*Milestone, ps []Priority, ts 
 }
 
 // Search uses the Github search API
-func (a *GithubAPI) Search(query string) ([]github.Issue, error) {
-	result, _, err := a.client.Search.Issues(query,
-		&github.SearchOptions{
-			Order:       "updated",
-			ListOptions: github.ListOptions{PerPage: 1000},
-		})
-	if err != nil {
-		return nil, err
+func (a *GithubAPI) Search(query string) <-chan *issueResult {
+	params := &github.SearchOptions{
+		Order:       "updated",
+		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	return result.Issues, nil
+	out := make(chan *issueResult)
+	go func() {
+		defer close(out)
+		for {
+			result, resp, err := a.client.Search.Issues(query, params)
+			if err != nil {
+				out <- &issueResult{nil, err}
+			}
+			out <- &issueResult{result.Issues, nil}
+			if resp.NextPage == 0 {
+				break
+			}
+			params.ListOptions.Page = resp.NextPage
+		}
+	}()
+	return out
+}
 
+func (a *GithubAPI) ByOrg(query string) <-chan *issueResult {
+	params := &github.IssueListOptions{
+		Filter:      "all",
+		Sort:        "updated",
+		ListOptions: github.ListOptions{PerPage: 1000},
+	}
+	out := make(chan *issueResult)
+	go func() {
+		defer close(out)
+		for {
+			logger.Debugln("Issue.ListByOrg, page:", params.ListOptions.Page)
+			issues, resp, err := a.client.Issues.ListByOrg(query, params)
+			if err != nil {
+				out <- &issueResult{nil, err}
+			}
+			out <- &issueResult{issues, nil}
+			if resp.NextPage == 0 {
+				break
+			}
+			params.ListOptions.Page = resp.NextPage
+		}
+	}()
+	return out
+}
+
+func (a *GithubAPI) ByUser() <-chan *issueResult {
+	params := &github.IssueListOptions{
+		// Filter:      "all",
+		Sort:        "updated",
+		ListOptions: github.ListOptions{PerPage: 1000},
+	}
+
+	out := make(chan *issueResult)
+	go func() {
+		defer close(out)
+		for {
+			logger.Debugln("Issues.List, page:", params.ListOptions.Page)
+			issues, resp, err := a.client.Issues.List(true, params)
+			if err != nil {
+				out <- &issueResult{nil, err}
+			}
+			out <- &issueResult{issues, nil}
+			if resp.NextPage == 0 {
+				break
+			}
+			params.ListOptions.Page = resp.NextPage
+		}
+	}()
+	return out
 }
 
 // Base Window Impl
@@ -154,14 +225,17 @@ type TopIssueWindow struct {
 	Opts        *Options
 	Config      *Config
 	API         API
+	Org         string
 	Target      string
 	Sort        string
 	Filter      string
 	Status      string
+	Alert       string
 	Focus       Window
 	ContextMenu Window
 	SortFunc    func(*Issue, *Issue) bool
 	SortAsc     bool
+	drawSync    sync.Mutex
 
 	// Milestones are weird
 	Milestones map[string][]*Milestone
@@ -178,7 +252,7 @@ type TopIssueWindow struct {
 	ListMilestoneMenu Window
 	ListPriorityMenu  Window
 	ListTypeMenu      Window
-	Alert             Window
+	AlertModal        Window
 	StatusLine        Window
 }
 
@@ -196,21 +270,33 @@ func NewTopIssueWindow(client *github.Client, opts *Options, config *Config, api
 // Init all of the subwindows
 func (w *TopIssueWindow) Init() error {
 	defer profile("TopIssueWindow.Init").Stop()
-
-	// build our search string
-	target := "is:open is:issue"
-	if w.Target == "" {
-		if len(w.Config.Projects) > 0 {
-			for _, project := range w.Config.Projects {
-				target += fmt.Sprintf(" repo:%s", project)
+	w.drawSync.Lock()
+	defer w.drawSync.Unlock()
+	// Decide what to search for
+	// 1. if org is specified, use that
+	// 2. if target is specified, use that
+	// 3. if no target is specified but projects are configued, use that
+	// 4. if no target and no projects, list by user
+	org := w.Opts.CLI.String("org")
+	if org != "" {
+		w.Org = org
+	} else {
+		// build our search string
+		target := "is:open is:issue"
+		if w.Target == "" {
+			if len(w.Config.Projects) > 0 {
+				for _, project := range w.Config.Projects {
+					target += fmt.Sprintf(" repo:%s", project)
+				}
+				w.Target = target
+			} else {
+				w.Target = ""
 			}
 		} else {
-			return fmt.Errorf("No target specified and no projects configured, try `triage ui repo:owner/repo`")
+			target += fmt.Sprintf(" %s", w.Target)
+			w.Target = target
 		}
-	} else {
-		target += fmt.Sprintf(" %s", w.Target)
 	}
-	w.Target = target
 
 	// build our milestones, priorities, types
 	milestones := map[string][]*Milestone{}
@@ -239,6 +325,7 @@ func (w *TopIssueWindow) Init() error {
 	w.ListMilestoneMenu = NewIssueListMilestoneMenu(list)
 	w.ListPriorityMenu = NewIssueListPriorityMenu(list)
 	w.ListTypeMenu = NewIssueListTypeMenu(list)
+	w.AlertModal = NewIssueAlertWindow(w)
 
 	for _, win := range []Window{
 		w.Help,
@@ -251,17 +338,13 @@ func (w *TopIssueWindow) Init() error {
 		w.FilterLine,
 		w.SortLine,
 		w.StatusLine,
+		w.AlertModal,
 	} {
 		err := win.Init()
 		if err != nil {
 			return err
 		}
 	}
-	// w.DefaultMenu = NewIssueWindowDefaultMenu(w)
-	// w.IssueMenu = NewIssueWindowIssueMenu(w)
-	// w.MilestoneMenu = NewIssueWindowMilestoneMenu(w)
-	// w.Menu = w.DefaultMenu
-	// w.Filter = NewFilterWindow(w)
 
 	// // Start with the list focused
 	w.Focus = w.List
@@ -281,6 +364,16 @@ func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
 	w.List.Draw(x, y+4, x1, y1-2)
 	w.StatusLine.Draw(x, y1-1, x1, y1-1)
 	w.Help.Draw(x, y, x1, y1)
+	w.AlertModal.Draw(x, y, x1, y1)
+}
+
+func (w *TopIssueWindow) Redraw() {
+	w.drawSync.Lock()
+	defer w.drawSync.Unlock()
+	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
+	width, height := termbox.Size()
+	w.Draw(0, 0, width, height)
+	termbox.Flush()
 }
 
 // HandleEvent passes events to the subwindows
@@ -401,6 +494,71 @@ func (w *IssueHelpWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
+// Alert modal
+
+// IssueAlertWindow displays help text
+type IssueAlertWindow struct {
+	*IssueSubwindow
+}
+
+// NewIssueAlertWindow ctor
+func NewIssueAlertWindow(w *TopIssueWindow) *IssueAlertWindow {
+	return &IssueAlertWindow{&IssueSubwindow{w}}
+}
+
+// Draw the help window
+func (w *IssueAlertWindow) Draw(x, y, x1, y1 int) {
+	if w.Alert == "" {
+		return
+	}
+
+	width, height := termbox.Size()
+	buffer := termbox.CellBuffer()
+	// dim the background
+	for ix := 0; ix < width; ix++ {
+		for iy := 0; iy < height; iy++ {
+			cell := buffer[iy*width+ix]
+			termbox.SetCell(ix, iy, cell.Ch, 235, cell.Bg)
+		}
+	}
+
+	lines := strings.Split(w.Alert, "\n")
+	// find a center
+	maxWidth := 1
+	maxHeight := len(lines)
+	for _, line := range lines {
+		if maxWidth < len(line) {
+			maxWidth = len(line)
+		}
+	}
+	startX := (width / 2) - (maxWidth / 2)
+	startY := (height / 2) - (maxHeight / 2)
+
+	logger.Debugf("startX: %d startY: %d\n", startX, startY)
+
+	for iy, line := range lines {
+		for ix, c := range line {
+			fg := termbox.Attribute(5)
+			bg := termbox.ColorDefault
+			if c == ' ' {
+				continue
+			}
+			termbox.SetCell(ix+startX, iy+startY, c, fg, bg)
+		}
+	}
+}
+
+// HandleEvent closes the window on any keypress
+func (w *IssueAlertWindow) HandleEvent(ev termbox.Event) (bool, error) {
+	switch ev.Type {
+	case termbox.EventKey:
+		w.Focus = w.List
+		w.ContextMenu = w.ListMenu
+		return true, nil
+	}
+	return false, nil
+}
+
 // Header
 
 // IssueHeaderWindow shows the title bar
@@ -415,7 +573,15 @@ func NewIssueHeaderWindow(w *TopIssueWindow) *IssueHeaderWindow {
 
 // Draw the titlebar
 func (w *IssueHeaderWindow) Draw(x, y, x1, y1 int) {
-	printLine(fmt.Sprintf("*triage* %s", w.Target), x, y)
+	// org if it exists, target if it exists, otherwise by user
+	title := w.Target
+	if w.Org != "" {
+		title = fmt.Sprintf("all open issues for org=%s", w.Org)
+	} else if title == "" {
+		title = fmt.Sprintf("assigned issues for authenticated user")
+	}
+
+	printLine(fmt.Sprintf("*triage* %s", title), x, y)
 }
 
 // Statusline
@@ -983,11 +1149,13 @@ func NewIssueListWindow(w *TopIssueWindow) *IssueListWindow {
 
 // Init fetches the initial issues
 func (w *IssueListWindow) Init() error {
+	// err := w.refresh()
+	// if err != nil {
+	//   return err
+	// }
+
 	// fetch the initial list of issues, etc
-	err := w.refresh()
-	if err != nil {
-		return err
-	}
+	go w.refresh()
 
 	return nil
 }
@@ -1000,7 +1168,9 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 	line := 0
 
 	//debug
-	w.Status += fmt.Sprintf(" ci: %d si: %d li: %d", w.currentIndex, w.scrollIndex, w.lastIndex)
+	if w.Opts.Debug {
+		w.Status += fmt.Sprintf(" ci: %d si: %d li: %d ", w.currentIndex, w.scrollIndex, w.lastIndex)
+	}
 
 	// headers
 	headerFg := termbox.ColorDefault | termbox.AttrUnderline
@@ -1028,16 +1198,25 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 		cursor := " "
 		if i == w.currentIndex && w.Focus == w {
 			cursor = ">"
+			w.Status += fmt.Sprintf("%s/%s", issue.Owner, issue.Repo)
+			for _, label := range issue.Labels {
+				w.Status += fmt.Sprintf(" %s", label)
+			}
 		}
 		w.lastIndex = i
 
+		repo := issue.Repo
+		if len(repo) > 5 {
+			repo = repo[:5]
+		}
+
 		printLine(fmt.Sprintf(
-			"%s%d%d%d %s/%-4d %s",
+			"%s%d%d%d % 5s/%-4d %s",
 			cursor,
 			issue.Milestone.Index,
 			issue.Priority.Index,
 			issue.Type.Index,
-			issue.Repo[:5],
+			repo,
 			issue.Number,
 			issue.Title,
 		), x+1, y+line)
@@ -1131,18 +1310,43 @@ func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 // refresh updates all the issues for the current query
 func (w *IssueListWindow) refresh() error {
 	defer profile("IssueListWindow.refresh").Stop()
-	rawIssues, err := w.API.Search(w.Target)
+
+	// Decide what to search for
+	// 1. if org is specified, use that
+	// 2. if target is specified, use that
+	// 3. if no target is specified but projects are configued, use that
+	// 4. if no target and no projects, list by user
+	var resultsChan <-chan *issueResult
+	var err error
+	if w.Org != "" {
+		resultsChan = w.API.ByOrg(w.Org)
+	} else if w.Target != "" {
+		resultsChan = w.API.Search(w.Target)
+	} else {
+		resultsChan = w.API.ByUser()
+	}
 	if err != nil {
 		return err
 	}
 
 	issues := []*Issue{}
-	for _, issue := range rawIssues {
-		issues = append(issues, NewIssue(issue, w.Milestones, w.Priorities, w.Types))
+	w.Alert = "Fetching issues..."
+	w.Redraw()
+	for result := range resultsChan {
+		if result.Err != nil {
+			return result.Err
+		}
+		for _, issue := range result.Issues {
+			issues = append(issues, NewIssue(issue, w.Milestones, w.Priorities, w.Types))
+		}
+		w.issues = issues
+		w.currentIssues = issues
+		w.Alert = fmt.Sprintf("Fetching issues, got: %d", len(issues))
+		w.Redraw()
 	}
 
 	if w.Opts.Debug {
-		data, err := json.MarshalIndent(rawIssues, "", "  ")
+		data, err := json.MarshalIndent(issues, "", "  ")
 		if err != nil {
 			return err
 		}
@@ -1151,9 +1355,8 @@ func (w *IssueListWindow) refresh() error {
 			return err
 		}
 	}
-
-	w.issues = issues
-	w.currentIssues = issues
+	w.Alert = ""
+	w.Redraw()
 	return nil
 }
 
@@ -1283,10 +1486,16 @@ func TriageSort(i, j *Issue) bool {
 		if jPri != 1 {
 			return true
 		}
+		if iNumber == jNumber {
+			return i.Repo < j.Repo
+		}
 		return iNumber < jNumber
 	} else if jPri == 1 {
 		// we already know iPri is not 1
 		return false
+	}
+	if iNumber == jNumber {
+		return i.Repo < j.Repo
 	}
 	return iNumber < jNumber
 }

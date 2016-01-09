@@ -36,6 +36,7 @@ var (
 	}
 )
 
+// SoftExit panics if debug is set, otherwise prints error and exits
 func SoftExit(opts *Options, err error) {
 	if opts.Debug {
 		panic(err)

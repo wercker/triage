@@ -47,7 +47,7 @@ type IssueType struct {
 	*Type
 }
 
-type issueResult struct {
+type IssueResult struct {
 	Issues []github.Issue
 	Err    error
 }
@@ -126,20 +126,20 @@ func NewIssue(issue github.Issue, ms map[string][]*Milestone, ps []Priority, ts 
 }
 
 // Search uses the Github search API
-func (a *GithubAPI) Search(query string) <-chan *issueResult {
+func (a *GithubAPI) Search(query string) <-chan *IssueResult {
 	params := &github.SearchOptions{
 		Order:       "updated",
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	out := make(chan *issueResult)
+	out := make(chan *IssueResult)
 	go func() {
 		defer close(out)
 		for {
 			result, resp, err := a.client.Search.Issues(query, params)
 			if err != nil {
-				out <- &issueResult{nil, err}
+				out <- &IssueResult{nil, err}
 			}
-			out <- &issueResult{result.Issues, nil}
+			out <- &IssueResult{result.Issues, nil}
 			if resp.NextPage == 0 {
 				break
 			}
@@ -149,22 +149,23 @@ func (a *GithubAPI) Search(query string) <-chan *issueResult {
 	return out
 }
 
-func (a *GithubAPI) ByOrg(query string) <-chan *issueResult {
+// ByOrg lists all issues by org
+func (a *GithubAPI) ByOrg(query string) <-chan *IssueResult {
 	params := &github.IssueListOptions{
 		Filter:      "all",
 		Sort:        "updated",
 		ListOptions: github.ListOptions{PerPage: 1000},
 	}
-	out := make(chan *issueResult)
+	out := make(chan *IssueResult)
 	go func() {
 		defer close(out)
 		for {
 			logger.Debugln("Issue.ListByOrg, page:", params.ListOptions.Page)
 			issues, resp, err := a.client.Issues.ListByOrg(query, params)
 			if err != nil {
-				out <- &issueResult{nil, err}
+				out <- &IssueResult{nil, err}
 			}
-			out <- &issueResult{issues, nil}
+			out <- &IssueResult{issues, nil}
 			if resp.NextPage == 0 {
 				break
 			}
@@ -174,23 +175,24 @@ func (a *GithubAPI) ByOrg(query string) <-chan *issueResult {
 	return out
 }
 
-func (a *GithubAPI) ByUser() <-chan *issueResult {
+// ByUser lists issues assigned to authenticated user
+func (a *GithubAPI) ByUser() <-chan *IssueResult {
 	params := &github.IssueListOptions{
 		// Filter:      "all",
 		Sort:        "updated",
 		ListOptions: github.ListOptions{PerPage: 1000},
 	}
 
-	out := make(chan *issueResult)
+	out := make(chan *IssueResult)
 	go func() {
 		defer close(out)
 		for {
 			logger.Debugln("Issues.List, page:", params.ListOptions.Page)
 			issues, resp, err := a.client.Issues.List(true, params)
 			if err != nil {
-				out <- &issueResult{nil, err}
+				out <- &IssueResult{nil, err}
 			}
-			out <- &issueResult{issues, nil}
+			out <- &IssueResult{issues, nil}
 			if resp.NextPage == 0 {
 				break
 			}
@@ -200,7 +202,7 @@ func (a *GithubAPI) ByUser() <-chan *issueResult {
 	return out
 }
 
-// Base Window Impl
+// IssueSubwindow is the base Window Impl
 type IssueSubwindow struct {
 	*TopIssueWindow
 }
@@ -219,7 +221,7 @@ func (w *IssueSubwindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-// Top Level Window
+// TopIssueWindow is the Top Level Window
 type TopIssueWindow struct {
 	Client      *github.Client
 	Opts        *Options
@@ -367,6 +369,7 @@ func (w *TopIssueWindow) Draw(x, y, x1, y1 int) {
 	w.AlertModal.Draw(x, y, x1, y1)
 }
 
+// Redraw is now our main entrypoint to drawing
 func (w *TopIssueWindow) Redraw() {
 	w.drawSync.Lock()
 	defer w.drawSync.Unlock()
@@ -1051,7 +1054,7 @@ func (w *IssueListPriorityMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	return true, nil
 }
 
-// IssueListTypeMenu
+// IssueListTypeMenu for setting type
 type IssueListTypeMenu struct {
 	*IssueListWindow
 }
@@ -1316,7 +1319,7 @@ func (w *IssueListWindow) refresh() error {
 	// 2. if target is specified, use that
 	// 3. if no target is specified but projects are configued, use that
 	// 4. if no target and no projects, list by user
-	var resultsChan <-chan *issueResult
+	var resultsChan <-chan *IssueResult
 	var err error
 	if w.Org != "" {
 		resultsChan = w.API.ByOrg(w.Org)
@@ -1445,7 +1448,7 @@ func (w *IssueListWindow) Less(i, j int) bool {
 	return result
 }
 
-// Sorting Stuff
+// RepoSort sorts by repo name then triagesort
 func RepoSort(i, j *Issue) bool {
 	if i.Repo == j.Repo {
 		return TriageSort(i, j)
@@ -1453,6 +1456,7 @@ func RepoSort(i, j *Issue) bool {
 	return i.Repo < j.Repo
 }
 
+// NumberSort sorts by number then triagesort
 func NumberSort(i, j *Issue) bool {
 	if i.Number == j.Number {
 		return TriageSort(i, j)
@@ -1460,6 +1464,7 @@ func NumberSort(i, j *Issue) bool {
 	return i.Number < j.Number
 }
 
+// TitleSort sorts by title then triagesort
 func TitleSort(i, j *Issue) bool {
 	if i.Title == j.Title {
 		return TriageSort(i, j)

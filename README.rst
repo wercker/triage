@@ -221,7 +221,8 @@ TODO(termie): warn if nearer date noticed when creating
 
 ::
 
-  # create a new milestone in a project (due next week monday, more or less)
+  # create a new milestone in a project due the first monday after now + 5 days
+  # with a fancy name picked based on the year and week,
   $ triage create-milestone owner/repo
   # or use a due date and title
   $ triage create-milestone --due 2016-01-22 --title "I named myself" owner/repo

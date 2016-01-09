@@ -30,9 +30,13 @@ var (
 				SoftExit(opts, err)
 			}
 		},
+		Flags: []cli.Flag{
+			cli.StringFlag{Name: "org", Usage: "list by org"},
+		},
 	}
 )
 
+// SoftExit panics if debug is set, otherwise prints error and exits
 func SoftExit(opts *Options, err error) {
 	if opts.Debug {
 		panic(err)
@@ -45,6 +49,7 @@ func SoftExit(opts *Options, err error) {
 type Options struct {
 	APIToken string
 	Debug    bool
+	CLI      *cli.Context
 }
 
 // NewOptions constructor
@@ -62,6 +67,7 @@ func NewOptions(c *cli.Context) (*Options, error) {
 	return &Options{
 		APIToken: c.GlobalString("api-token"),
 		Debug:    debug,
+		CLI:      c,
 	}, nil
 }
 
@@ -95,18 +101,9 @@ func cmdUI(opts *Options, target string) error {
 		return err
 	}
 	api := NewGithubAPI(client, opts, config)
-	c := NewConsole(client)
-	if err := c.Init(); err != nil {
-		return err
-	}
 
 	issueWindow := NewTopIssueWindow(client, opts, config, api, target)
 	if err := issueWindow.Init(); err != nil {
-		return err
-	}
-	c.AddWindow(issueWindow)
-
-	if err := c.Draw(); err != nil {
 		return err
 	}
 
@@ -118,15 +115,11 @@ TermLoop:
 			case termbox.KeyCtrlC:
 				break TermLoop
 			default:
-				c.CurrentWindow.HandleEvent(ev)
-				if err := c.Draw(); err != nil {
-					return err
-				}
+				issueWindow.HandleEvent(ev)
+				issueWindow.Redraw()
 			}
 		case termbox.EventResize:
-			if err := c.Draw(); err != nil {
-				return err
-			}
+			issueWindow.Redraw()
 		}
 	}
 
@@ -144,14 +137,6 @@ func printLineColor(str string, x, y int, fg, bg termbox.Attribute) {
 		termbox.SetCell(x+i, y, rune(str[i]), fg, bg)
 	}
 }
-
-// func drawAll(c *Console) {
-//   termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-
-//   c.CurrentWindow.Draw()
-
-//   termbox.Flush()
-// }
 
 func main() {
 	app := cli.NewApp()
@@ -172,7 +157,7 @@ func main() {
 	}
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{Name: "debug", Usage: "output debug info"},
-		cli.StringFlag{Name: "api-token", Value: "", Usage: "github api token", EnvVar: "GITHUB_API_TOKEN"},
+		cli.StringFlag{Name: "api-token", Value: "", Usage: "github api token", EnvVar: "GITHUB_TOKEN"},
 	}
 	app.Run(os.Args)
 }

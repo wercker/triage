@@ -14,7 +14,7 @@ var (
 	MajorVersion = "0"
 
 	// MinorVersion is the semver minor version.
-	MinorVersion = "1"
+	MinorVersion = "2"
 
 	// PatchVersion is the semver patch version. (use 0 for dev, build process
 	// will inject a build number)

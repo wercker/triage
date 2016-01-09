@@ -88,34 +88,7 @@ Filtering Helpers
 There are a bunch of things being searched for, try `p2` to see all your
 priority 2 issues, `m1 p2 t3 la` for all your milestone 1, priority 2, type 3 issues that have an "la" somewhere in the title. The issue number and repo are also in there.
 
--------------
-Caveat Emptor
--------------
 
-::
-
-  THIS...IS...ALLLLPPPHAAAA!
-  .. O
-  .. /I_
-  .. /
-  [][][][][] ... >-/-O....... [][][][]
-  [][][][][] ................ [][][][]
-  [][][][][] ................ [][][][]
-
-
-Surely full of bugs, most of them might not kill you. Pretty much panics on
-anything that goes wrong with hopes that you'll figure out what's going on
-and file a patch ;)
-
-Some known issues:
-
- - milestone actions silently fail if you don't have the milestone system setup
-   (see "Initial Milestones" below).
- - if, for example, a repo can't be found you'll get a panic.
- - you can't scroll through body text, it's just there to remind you of the
-   issue (follow the link for more).
- - despite running a company dedicated to build and testing, I did not
-   write tests for this, termbox + testing = my brain a splode.
 
 
 Getting Started
@@ -313,3 +286,32 @@ Manually::
   $ glide in
   $ glide install
   $ go build
+
+
+Caveat Emptor
+-------------
+
+::
+
+  THIS...IS...ALLLLPPPHAAAA!
+  .. O
+  .. /I_
+  .. /
+  [][][][][] ... >-/-O....... [][][][]
+  [][][][][] ................ [][][][]
+  [][][][][] ................ [][][][]
+
+
+Surely full of bugs, most of them might not kill you. Pretty much panics on
+anything that goes wrong with hopes that you'll figure out what's going on
+and file a patch ;)
+
+Some known issues:
+
+ - milestone actions silently fail if you don't have the milestone system setup
+   (see "Initial Milestones" below).
+ - if, for example, a repo can't be found you'll get a panic.
+ - you can't scroll through body text, it's just there to remind you of the
+   issue (follow the link for more).
+ - despite running a company dedicated to build and testing, I did not
+   write tests for this, termbox + testing = my brain a splode.

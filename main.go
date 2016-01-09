@@ -61,7 +61,7 @@ func NewOptions(c *cli.Context) (*Options, error) {
 
 	apiToken := c.GlobalString("api-token")
 	if apiToken == "" {
-		return nil, fmt.Errorf("No API token found, please set GITHUB_API_TOKEN or --api-token")
+		return nil, fmt.Errorf("No API token found, please set GITHUB_TOKEN or --api-token")
 	}
 
 	return &Options{

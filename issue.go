@@ -14,6 +14,13 @@ import (
 	"github.com/nsf/termbox-go"
 )
 
+// Window is the basic interface for things that draw on the screen
+type Window interface {
+	Init() error
+	Draw(x, y, x1, y1 int)
+	HandleEvent(termbox.Event) (bool, error)
+}
+
 // Issue is the data we care about from the github.Issue, plus some of our own
 type Issue struct {
 	Milestone *IssueMilestone
@@ -47,6 +54,7 @@ type IssueType struct {
 	*Type
 }
 
+// IssueResult is for loading issues iteratively
 type IssueResult struct {
 	Issues []github.Issue
 	Err    error
@@ -202,22 +210,79 @@ func (a *GithubAPI) ByUser() <-chan *IssueResult {
 	return out
 }
 
-// IssueSubwindow is the base Window Impl
-type IssueSubwindow struct {
+// RepoSort sorts by repo name then triagesort
+func RepoSort(i, j *Issue) bool {
+	if i.Repo == j.Repo {
+		return TriageSort(i, j)
+	}
+	return i.Repo < j.Repo
+}
+
+// NumberSort sorts by number then triagesort
+func NumberSort(i, j *Issue) bool {
+	if i.Number == j.Number {
+		return TriageSort(i, j)
+	}
+	return i.Number < j.Number
+}
+
+// TitleSort sorts by title then triagesort
+func TitleSort(i, j *Issue) bool {
+	if i.Title == j.Title {
+		return TriageSort(i, j)
+	}
+	return i.Title < j.Title
+}
+
+// TriageSortLess sorts in order of:
+// 1. Anything with Priority 1
+// 2. By TriageNumber (MilestonePriorityType)
+func TriageSort(i, j *Issue) bool {
+	iNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", i.Milestone.Index, i.Priority.Index, i.Type.Index))
+	jNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", j.Milestone.Index, j.Priority.Index, j.Type.Index))
+	iPri := i.Priority.Index
+	jPri := j.Priority.Index
+
+	// tiebreaker
+	if iNumber == jNumber {
+		iNumber += i.Number
+		jNumber += j.Number
+	}
+
+	if iPri == 1 {
+		if jPri != 1 {
+			return true
+		}
+		if iNumber == jNumber {
+			return i.Repo < j.Repo
+		}
+		return iNumber < jNumber
+	} else if jPri == 1 {
+		// we already know iPri is not 1
+		return false
+	}
+	if iNumber == jNumber {
+		return i.Repo < j.Repo
+	}
+	return iNumber < jNumber
+}
+
+// Subwindow is the base Window Impl
+type Subwindow struct {
 	*TopIssueWindow
 }
 
 // Init noop
-func (w *IssueSubwindow) Init() error {
+func (w *Subwindow) Init() error {
 	return nil
 }
 
 // Draw noop
-func (w *IssueSubwindow) Draw(x, y, x1, y1 int) {
+func (w *Subwindow) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent noop
-func (w *IssueSubwindow) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *Subwindow) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
@@ -274,6 +339,9 @@ func (w *TopIssueWindow) Init() error {
 	defer profile("TopIssueWindow.Init").Stop()
 	w.drawSync.Lock()
 	defer w.drawSync.Unlock()
+
+	termbox.SetOutputMode(termbox.Output256)
+
 	// Decide what to search for
 	// 1. if org is specified, use that
 	// 2. if target is specified, use that
@@ -315,19 +383,19 @@ func (w *TopIssueWindow) Init() error {
 	w.Priorities = w.Config.Priorities
 	w.Types = w.Config.Types
 
-	list := NewIssueListWindow(w)
+	list := NewListWindow(w)
 
-	w.Help = NewIssueHelpWindow(w)
-	w.Header = NewIssueHeaderWindow(w)
+	w.Help = NewHelpWindow(w)
+	w.Header = NewHeaderWindow(w)
 	w.List = list
-	w.FilterLine = NewIssueFilterWindow(w)
-	w.SortLine = NewIssueSortWindow(w)
-	w.StatusLine = NewIssueStatusWindow(w)
-	w.ListMenu = NewIssueListMenu(list)
-	w.ListMilestoneMenu = NewIssueListMilestoneMenu(list)
-	w.ListPriorityMenu = NewIssueListPriorityMenu(list)
-	w.ListTypeMenu = NewIssueListTypeMenu(list)
-	w.AlertModal = NewIssueAlertWindow(w)
+	w.FilterLine = NewFilterWindow(w)
+	w.SortLine = NewSortWindow(w)
+	w.StatusLine = NewStatusWindow(w)
+	w.ListMenu = NewListMenu(list)
+	w.ListMilestoneMenu = NewListMilestoneMenu(list)
+	w.ListPriorityMenu = NewListPriorityMenu(list)
+	w.ListTypeMenu = NewListTypeMenu(list)
+	w.AlertModal = NewAlertWindow(w)
 
 	for _, win := range []Window{
 		w.Help,
@@ -426,18 +494,18 @@ func (w *TopIssueWindow) HandleGlobalEvent(ev termbox.Event) (bool, error) {
 
 // Help
 
-// IssueHelpWindow displays help text
-type IssueHelpWindow struct {
-	*IssueSubwindow
+// HelpWindow displays help text
+type HelpWindow struct {
+	*Subwindow
 }
 
-// NewIssueHelpWindow ctor
-func NewIssueHelpWindow(w *TopIssueWindow) *IssueHelpWindow {
-	return &IssueHelpWindow{&IssueSubwindow{w}}
+// NewHelpWindow ctor
+func NewHelpWindow(w *TopIssueWindow) *HelpWindow {
+	return &HelpWindow{&Subwindow{w}}
 }
 
 // Draw the help window
-func (w *IssueHelpWindow) Draw(x, y, x1, y1 int) {
+func (w *HelpWindow) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.Help {
 		return
 	}
@@ -487,7 +555,7 @@ func (w *IssueHelpWindow) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent closes the window on any keypress
-func (w *IssueHelpWindow) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *HelpWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		w.Focus = w.List
@@ -499,18 +567,18 @@ func (w *IssueHelpWindow) HandleEvent(ev termbox.Event) (bool, error) {
 
 // Alert modal
 
-// IssueAlertWindow displays help text
-type IssueAlertWindow struct {
-	*IssueSubwindow
+// AlertWindow displays help text
+type AlertWindow struct {
+	*Subwindow
 }
 
-// NewIssueAlertWindow ctor
-func NewIssueAlertWindow(w *TopIssueWindow) *IssueAlertWindow {
-	return &IssueAlertWindow{&IssueSubwindow{w}}
+// NewAlertWindow ctor
+func NewAlertWindow(w *TopIssueWindow) *AlertWindow {
+	return &AlertWindow{&Subwindow{w}}
 }
 
 // Draw the help window
-func (w *IssueAlertWindow) Draw(x, y, x1, y1 int) {
+func (w *AlertWindow) Draw(x, y, x1, y1 int) {
 	if w.Alert == "" {
 		return
 	}
@@ -552,7 +620,7 @@ func (w *IssueAlertWindow) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent closes the window on any keypress
-func (w *IssueAlertWindow) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *AlertWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		w.Focus = w.List
@@ -564,18 +632,18 @@ func (w *IssueAlertWindow) HandleEvent(ev termbox.Event) (bool, error) {
 
 // Header
 
-// IssueHeaderWindow shows the title bar
-type IssueHeaderWindow struct {
-	*IssueSubwindow
+// HeaderWindow shows the title bar
+type HeaderWindow struct {
+	*Subwindow
 }
 
-// NewIssueHeaderWindow ctor
-func NewIssueHeaderWindow(w *TopIssueWindow) *IssueHeaderWindow {
-	return &IssueHeaderWindow{&IssueSubwindow{w}}
+// NewHeaderWindow ctor
+func NewHeaderWindow(w *TopIssueWindow) *HeaderWindow {
+	return &HeaderWindow{&Subwindow{w}}
 }
 
 // Draw the titlebar
-func (w *IssueHeaderWindow) Draw(x, y, x1, y1 int) {
+func (w *HeaderWindow) Draw(x, y, x1, y1 int) {
 	// org if it exists, target if it exists, otherwise by user
 	title := w.Target
 	if w.Org != "" {
@@ -589,19 +657,19 @@ func (w *IssueHeaderWindow) Draw(x, y, x1, y1 int) {
 
 // Statusline
 
-// IssueStatusWindow shows some extra info on the bottom of the screen
-type IssueStatusWindow struct {
-	*IssueSubwindow
+// StatusWindow shows some extra info on the bottom of the screen
+type StatusWindow struct {
+	*Subwindow
 	Buffer string
 }
 
-// NewIssueStatusWindow ctor
-func NewIssueStatusWindow(w *TopIssueWindow) *IssueStatusWindow {
-	return &IssueStatusWindow{&IssueSubwindow{w}, ""}
+// NewStatusWindow ctor
+func NewStatusWindow(w *TopIssueWindow) *StatusWindow {
+	return &StatusWindow{&Subwindow{w}, ""}
 }
 
 // Draw the status line
-func (w *IssueStatusWindow) Draw(x, y, x1, y1 int) {
+func (w *StatusWindow) Draw(x, y, x1, y1 int) {
 	if w.Focus != w {
 		printLine(fmt.Sprintf("[:] %s", w.Status), x, y)
 		return
@@ -611,7 +679,7 @@ func (w *IssueStatusWindow) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent for our vim-style exit keys
-func (w *IssueStatusWindow) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *StatusWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
@@ -650,7 +718,7 @@ func (w *IssueStatusWindow) HandleEvent(ev termbox.Event) (bool, error) {
 }
 
 // execute the statusline for "q" and "wq"
-func (w *IssueStatusWindow) execute(s string) {
+func (w *StatusWindow) execute(s string) {
 	switch s {
 	case "q":
 		fallthrough
@@ -662,18 +730,18 @@ func (w *IssueStatusWindow) execute(s string) {
 
 // Filter
 
-// IssueFilterWindow handles the filter box
-type IssueFilterWindow struct {
-	*IssueSubwindow
+// FilterWindow handles the filter box
+type FilterWindow struct {
+	*Subwindow
 }
 
-// NewIssueFilterWindow ctor
-func NewIssueFilterWindow(w *TopIssueWindow) *IssueFilterWindow {
-	return &IssueFilterWindow{&IssueSubwindow{w}}
+// NewFilterWindow ctor
+func NewFilterWindow(w *TopIssueWindow) *FilterWindow {
+	return &FilterWindow{&Subwindow{w}}
 }
 
 // Draw and move the cursor to the filter box
-func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
+func (w *FilterWindow) Draw(x, y, x1, y1 int) {
 	cursor := " "
 	fg := termbox.ColorDefault
 	bg := termbox.ColorDefault
@@ -697,7 +765,7 @@ func (w *IssueFilterWindow) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent builds the filter string
-func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *FilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
@@ -737,20 +805,20 @@ func (w *IssueFilterWindow) HandleEvent(ev termbox.Event) (bool, error) {
 
 // Sort
 
-// IssueSortWindow handle the sort box and global menu
-type IssueSortWindow struct {
-	*IssueSubwindow
+// SortWindow handle the sort box and global menu
+type SortWindow struct {
+	*Subwindow
 
 	valid bool
 }
 
-// NewIssueSortWindow ctor
-func NewIssueSortWindow(w *TopIssueWindow) *IssueSortWindow {
-	return &IssueSortWindow{&IssueSubwindow{w}, false}
+// NewSortWindow ctor
+func NewSortWindow(w *TopIssueWindow) *SortWindow {
+	return &SortWindow{&Subwindow{w}, false}
 }
 
 // Init sets up our initial sorting functions
-func (w *IssueSortWindow) Init() error {
+func (w *SortWindow) Init() error {
 	// TODO(termie): allow sort to be specified in options
 	w.Sort = "+idx"
 	w.update(w.Sort)
@@ -760,7 +828,7 @@ func (w *IssueSortWindow) Init() error {
 }
 
 // Draw and move the cursor to the sort box
-func (w *IssueSortWindow) Draw(x, y, x1, y1 int) {
+func (w *SortWindow) Draw(x, y, x1, y1 int) {
 	cursor := " "
 	fg := termbox.ColorDefault
 	bg := termbox.ColorDefault
@@ -787,7 +855,7 @@ func (w *IssueSortWindow) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent builds the sort string
-func (w *IssueSortWindow) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *SortWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
@@ -823,7 +891,7 @@ func (w *IssueSortWindow) HandleEvent(ev termbox.Event) (bool, error) {
 }
 
 // update the sort func based on sort string
-func (w *IssueSortWindow) update(s string) {
+func (w *SortWindow) update(s string) {
 	if len(s) < 2 {
 		return
 	}
@@ -863,23 +931,23 @@ func (w *IssueSortWindow) update(s string) {
 
 // Context menus for the issue list
 
-// IssueListMenu is the default menu when issue list is focused
-type IssueListMenu struct {
-	*IssueListWindow
+// ListMenu is the default menu when issue list is focused
+type ListMenu struct {
+	*ListWindow
 }
 
-// NewIssueListMenu ctor
-func NewIssueListMenu(w *IssueListWindow) *IssueListMenu {
-	return &IssueListMenu{w}
+// NewListMenu ctor
+func NewListMenu(w *ListWindow) *ListMenu {
+	return &ListMenu{w}
 }
 
 // Init noop (needed to prevent IssueList.Init being called)
-func (w *IssueListMenu) Init() error {
+func (w *ListMenu) Init() error {
 	return nil
 }
 
 // Draw the menu
-func (w *IssueListMenu) Draw(x, y, x1, y1 int) {
+func (w *ListMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
 	}
@@ -893,7 +961,7 @@ func (w *IssueListMenu) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent for the menu
-func (w *IssueListMenu) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *ListMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	switch ev.Type {
 	case termbox.EventKey:
 		switch ev.Key {
@@ -917,23 +985,23 @@ func (w *IssueListMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	return false, nil
 }
 
-// IssueListMilestoneMenu for setting milestones
-type IssueListMilestoneMenu struct {
-	*IssueListWindow
+// ListMilestoneMenu for setting milestones
+type ListMilestoneMenu struct {
+	*ListWindow
 }
 
-// NewIssueListMilestoneMenu ctor
-func NewIssueListMilestoneMenu(w *IssueListWindow) *IssueListMilestoneMenu {
-	return &IssueListMilestoneMenu{w}
+// NewListMilestoneMenu ctor
+func NewListMilestoneMenu(w *ListWindow) *ListMilestoneMenu {
+	return &ListMilestoneMenu{w}
 }
 
 // Init noop (needed to prevent IssueList.Init being called)
-func (w *IssueListMilestoneMenu) Init() error {
+func (w *ListMilestoneMenu) Init() error {
 	return nil
 }
 
 // Draw the milestone menu
-func (w *IssueListMilestoneMenu) Draw(x, y, x1, y1 int) {
+func (w *ListMilestoneMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
 	}
@@ -941,7 +1009,7 @@ func (w *IssueListMilestoneMenu) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent sets the milestone
-func (w *IssueListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *ListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	issue := w.currentIssues[w.currentIndex]
 	milestones := w.Milestones[issue.Project]
 	if milestones == nil {
@@ -978,23 +1046,23 @@ func (w *IssueListMilestoneMenu) HandleEvent(ev termbox.Event) (bool, error) {
 
 }
 
-// IssueListPriorityMenu for setting priority
-type IssueListPriorityMenu struct {
-	*IssueListWindow
+// ListPriorityMenu for setting priority
+type ListPriorityMenu struct {
+	*ListWindow
 }
 
-// NewIssueListPriorityMenu ctor
-func NewIssueListPriorityMenu(w *IssueListWindow) *IssueListPriorityMenu {
-	return &IssueListPriorityMenu{w}
+// NewListPriorityMenu ctor
+func NewListPriorityMenu(w *ListWindow) *ListPriorityMenu {
+	return &ListPriorityMenu{w}
 }
 
 // Init noop (needed to prevent IssueList.Init being called)
-func (w *IssueListPriorityMenu) Init() error {
+func (w *ListPriorityMenu) Init() error {
 	return nil
 }
 
 // Draw the priority menu
-func (w *IssueListPriorityMenu) Draw(x, y, x1, y1 int) {
+func (w *ListPriorityMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
 	}
@@ -1007,7 +1075,7 @@ func (w *IssueListPriorityMenu) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent sets the priority
-func (w *IssueListPriorityMenu) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *ListPriorityMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	issue := w.currentIssues[w.currentIndex]
 	labels := []string{}
 
@@ -1054,23 +1122,23 @@ func (w *IssueListPriorityMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	return true, nil
 }
 
-// IssueListTypeMenu for setting type
-type IssueListTypeMenu struct {
-	*IssueListWindow
+// ListTypeMenu for setting type
+type ListTypeMenu struct {
+	*ListWindow
 }
 
-// NewIssueListTypeMenu ctor
-func NewIssueListTypeMenu(w *IssueListWindow) *IssueListTypeMenu {
-	return &IssueListTypeMenu{w}
+// NewListTypeMenu ctor
+func NewListTypeMenu(w *ListWindow) *ListTypeMenu {
+	return &ListTypeMenu{w}
 }
 
 // Init noop (needed to prevent IssueList.Init being called)
-func (w *IssueListTypeMenu) Init() error {
+func (w *ListTypeMenu) Init() error {
 	return nil
 }
 
 // Draw the type menu
-func (w *IssueListTypeMenu) Draw(x, y, x1, y1 int) {
+func (w *ListTypeMenu) Draw(x, y, x1, y1 int) {
 	if w.Focus != w.List {
 		return
 	}
@@ -1082,7 +1150,7 @@ func (w *IssueListTypeMenu) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent sets the type
-func (w *IssueListTypeMenu) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *ListTypeMenu) HandleEvent(ev termbox.Event) (bool, error) {
 	issue := w.currentIssues[w.currentIndex]
 	labels := []string{}
 
@@ -1131,8 +1199,8 @@ func (w *IssueListTypeMenu) HandleEvent(ev termbox.Event) (bool, error) {
 
 // Issue List
 
-// IssueListWindow is the main list of issues
-type IssueListWindow struct {
+// ListWindow is the main list of issues
+type ListWindow struct {
 	issues        []*Issue
 	currentIssues []*Issue
 	currentIndex  int
@@ -1142,16 +1210,16 @@ type IssueListWindow struct {
 
 	currentFilter string
 
-	*IssueSubwindow
+	*Subwindow
 }
 
-// NewIssueListWindow ctor
-func NewIssueListWindow(w *TopIssueWindow) *IssueListWindow {
-	return &IssueListWindow{IssueSubwindow: &IssueSubwindow{w}}
+// NewListWindow ctor
+func NewListWindow(w *TopIssueWindow) *ListWindow {
+	return &ListWindow{Subwindow: &Subwindow{w}}
 }
 
 // Init fetches the initial issues
-func (w *IssueListWindow) Init() error {
+func (w *ListWindow) Init() error {
 	// err := w.refresh()
 	// if err != nil {
 	//   return err
@@ -1164,7 +1232,7 @@ func (w *IssueListWindow) Init() error {
 }
 
 // Draw the header and list of issues
-func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
+func (w *ListWindow) Draw(x, y, x1, y1 int) {
 	w.filter(w.Filter)
 	w.sort()
 
@@ -1249,7 +1317,7 @@ func (w *IssueListWindow) Draw(x, y, x1, y1 int) {
 }
 
 // HandleEvent is mostly movement events and triggering submenus
-func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
+func (w *ListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 	// Check the menu first
 	handled, err := w.ContextMenu.HandleEvent(ev)
 	if err != nil {
@@ -1311,8 +1379,8 @@ func (w *IssueListWindow) HandleEvent(ev termbox.Event) (bool, error) {
 }
 
 // refresh updates all the issues for the current query
-func (w *IssueListWindow) refresh() error {
-	defer profile("IssueListWindow.refresh").Stop()
+func (w *ListWindow) refresh() error {
+	defer profile("ListWindow.refresh").Stop()
 
 	// Decide what to search for
 	// 1. if org is specified, use that
@@ -1364,7 +1432,7 @@ func (w *IssueListWindow) refresh() error {
 }
 
 // filter the issues based on substring
-func (w *IssueListWindow) filter(substr string) {
+func (w *ListWindow) filter(substr string) {
 	if substr == w.currentFilter {
 		return
 	}
@@ -1405,7 +1473,7 @@ IssueLoop:
 }
 
 // sort the issues based on sort string
-func (w *IssueListWindow) sort() {
+func (w *ListWindow) sort() {
 	if w.SortFunc == nil {
 		return
 	}
@@ -1413,7 +1481,7 @@ func (w *IssueListWindow) sort() {
 }
 
 // scroll moves the dang window contents around
-func (w *IssueListWindow) scroll(i int) {
+func (w *ListWindow) scroll(i int) {
 	w.scrollIndex += i
 	if w.scrollIndex >= len(w.currentIssues) {
 		w.scrollIndex = len(w.currentIssues) - 10
@@ -1430,77 +1498,20 @@ func (w *IssueListWindow) scroll(i int) {
 }
 
 // Len for Sortable
-func (w *IssueListWindow) Len() int {
+func (w *ListWindow) Len() int {
 	return len(w.currentIssues)
 }
 
 // Swap for Sortable
-func (w *IssueListWindow) Swap(i, j int) {
+func (w *ListWindow) Swap(i, j int) {
 	(w.currentIssues)[i], (w.currentIssues)[j] = (w.currentIssues)[j], (w.currentIssues)[i]
 }
 
 // Less for Sortable, defers to TriageSortLess
-func (w *IssueListWindow) Less(i, j int) bool {
+func (w *ListWindow) Less(i, j int) bool {
 	result := w.SortFunc(w.currentIssues[i], w.currentIssues[j])
 	if w.SortAsc == false {
 		return !result
 	}
 	return result
-}
-
-// RepoSort sorts by repo name then triagesort
-func RepoSort(i, j *Issue) bool {
-	if i.Repo == j.Repo {
-		return TriageSort(i, j)
-	}
-	return i.Repo < j.Repo
-}
-
-// NumberSort sorts by number then triagesort
-func NumberSort(i, j *Issue) bool {
-	if i.Number == j.Number {
-		return TriageSort(i, j)
-	}
-	return i.Number < j.Number
-}
-
-// TitleSort sorts by title then triagesort
-func TitleSort(i, j *Issue) bool {
-	if i.Title == j.Title {
-		return TriageSort(i, j)
-	}
-	return i.Title < j.Title
-}
-
-// TriageSortLess sorts in order of:
-// 1. Anything with Priority 1
-// 2. By TriageNumber (MilestonePriorityType)
-func TriageSort(i, j *Issue) bool {
-	iNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", i.Milestone.Index, i.Priority.Index, i.Type.Index))
-	jNumber, _ := strconv.Atoi(fmt.Sprintf("%d%d%d", j.Milestone.Index, j.Priority.Index, j.Type.Index))
-	iPri := i.Priority.Index
-	jPri := j.Priority.Index
-
-	// tiebreaker
-	if iNumber == jNumber {
-		iNumber += i.Number
-		jNumber += j.Number
-	}
-
-	if iPri == 1 {
-		if jPri != 1 {
-			return true
-		}
-		if iNumber == jNumber {
-			return i.Repo < j.Repo
-		}
-		return iNumber < jNumber
-	} else if jPri == 1 {
-		// we already know iPri is not 1
-		return false
-	}
-	if iNumber == jNumber {
-		return i.Repo < j.Repo
-	}
-	return iNumber < jNumber
 }

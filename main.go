@@ -101,20 +101,11 @@ func cmdUI(opts *Options, target string) error {
 		return err
 	}
 	api := NewGithubAPI(client, opts, config)
-	c := NewConsole(client)
-	if err := c.Init(); err != nil {
-		return err
-	}
 
 	issueWindow := NewTopIssueWindow(client, opts, config, api, target)
 	if err := issueWindow.Init(); err != nil {
 		return err
 	}
-	c.AddWindow(issueWindow)
-
-	// if err := issueWidnow.Redraw(); err != nil {
-	//   return err
-	// }
 
 TermLoop:
 	for {
@@ -124,7 +115,7 @@ TermLoop:
 			case termbox.KeyCtrlC:
 				break TermLoop
 			default:
-				c.CurrentWindow.HandleEvent(ev)
+				issueWindow.HandleEvent(ev)
 				issueWindow.Redraw()
 			}
 		case termbox.EventResize:
@@ -147,14 +138,6 @@ func printLineColor(str string, x, y int, fg, bg termbox.Attribute) {
 	}
 }
 
-// func drawAll(c *Console) {
-//   termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-
-//   c.CurrentWindow.Draw()
-
-//   termbox.Flush()
-// }
-
 func main() {
 	app := cli.NewApp()
 	app.Author = "termie"
@@ -174,7 +157,7 @@ func main() {
 	}
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{Name: "debug", Usage: "output debug info"},
-		cli.StringFlag{Name: "api-token", Value: "", Usage: "github api token", EnvVar: "GITHUB_API_TOKEN"},
+		cli.StringFlag{Name: "api-token", Value: "", Usage: "github api token", EnvVar: "GITHUB_TOKEN"},
 	}
 	app.Run(os.Args)
 }

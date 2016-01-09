@@ -15,7 +15,7 @@ Grab yourself a personal access token from Github:
 
   https://github.com/settings/tokens
 
-Add it to your env as GITHUB_API_TOKEN
+Add it to your env as GITHUB_TOKEN
 
 
 How To Build
@@ -34,12 +34,23 @@ Quickstart::
 How To Use
 ----------
 
+PRO TIP: Instead of typing `--api-token=<your api token>`, export `GITHUB_TOKEN`
+
 ::
 
-  $ ./triage --api-token=<your api token> ui repo:some/repo
+  $ triage --api-token=<your api token> ui repo:some/repo
 
 What you'll see is a list of all the open issues (sorted by number until you
 start prioritizing things).
+
+You can see everything for an org (might take a while) by using::
+
+  $ triage --api-token=<your api token> ui --org your_org
+
+Or just the stuff assigned to you (only really there so that first-run works)::
+
+  $ triage --api-token=<your api token> ui
+
 
 Hit "?" for help, it's super cool.
 

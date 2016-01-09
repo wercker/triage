@@ -2,7 +2,7 @@ Triage Really Invigorates All Github Experiences
 ================================================
 
 Triage is a small, opinionated, tool for managing your github issues for an
-organization.
+organization, multiple projects, or just yourself.
 
  .. image:: https://cloud.githubusercontent.com/assets/56459/12189793/2b272dfe-b576-11e5-9d65-f192100a1627.png
 

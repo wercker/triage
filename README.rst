@@ -4,9 +4,17 @@ Triage Really Invigorates All Github Experiences
 Triage is a small, opinionated, tool for managing your github issues for an
 organization, multiple projects, or just yourself.
 
+It is based on processes written about in these two links:
+
+http://www.ianbicking.org/blog/2014/03/use-github-issues-to-organize-a-project.html
+http://www.stateofcode.com/2013/06/using-github-issues-effectively/
+
+Here are some screenshots:
+
  .. image:: https://cloud.githubusercontent.com/assets/56459/12189793/2b272dfe-b576-11e5-9d65-f192100a1627.png
 
  .. image:: https://cloud.githubusercontent.com/assets/56459/12189794/2cdd46d8-b576-11e5-86d9-60901ef556f4.png
+
 
 Before You Start
 ----------------
@@ -18,23 +26,10 @@ Grab yourself a personal access token from Github:
 Add it to your env as GITHUB_TOKEN
 
 
-How To Build
-------------
+Quickstart: How To Use
+----------------------
 
-PRO TIP: https://github.com/wercker/triage/releases
-
-N.B. I'm using a really old glide for various purposes, if all else fails the
-glide.yaml has a list of the packages you need.
-
-Quickstart::
-
-  $ glide in
-  $ glide install
-  $ go build
-
-
-How To Use
-----------
+Go grab a release from: https://github.com/wercker/triage/releases
 
 PRO TIP: Instead of typing `--api-token=<your api token>`, export `GITHUB_TOKEN`
 
@@ -71,6 +66,9 @@ Ctrl-C exits, as do typing ":q" or ":wq" and hitting enter.
 
 You can put config information in `triage.yml`, and eventually TODO(termie) in
 something like .triage/config
+
+(If anybody wants to make a screenshare of using this to triage issues that'd
+be cool)
 
 -----------------
 IDX Sorting Order
@@ -120,8 +118,8 @@ Some known issues:
    write tests for this, termbox + testing = my brain a splode.
 
 
-Some Useful Setup Helpers
--------------------------
+Getting Started
+---------------
 
 Triage ships with pretty alright defaults, but if you want it to conform to
 stuff you already have set up, there are some tools to output existing info
@@ -218,8 +216,11 @@ milestone has *the nearest due date after now* as "Current"
 
 Or, have Triage make a new milestone in each of your projects. If there is
 a milestone with a due date sooner than that, that'll be detected instead,
-so don't mess around with milestones manually
+so don't mess around with milestones manually.
 TODO(termie): warn if nearer date noticed when creating
+
+You'll want to create a new milestone at the beginning of each week, it'll be
+due the next monday.
 
 ::
 
@@ -259,9 +260,8 @@ in as the starting point for it::
   $ triage ui "repo:owner/repo searchstring"
 
 
-
-Github Search will only give you up to 1000 results, so if you've got a ton
-more than that you're going to want to make specific triage calls.
+Github Search will start getting slow with lots of results, so if you've got a
+ton you're going to want to make specific triage calls.
 
 
 An Example Config
@@ -299,3 +299,17 @@ get if you just run with it::
       - name: low
         color: "009800"
 
+
+How To Build
+------------
+
+PRO TIP: https://github.com/wercker/triage/releases
+
+N.B. I'm using a really old glide for various purposes, if all else fails the
+glide.yaml has a list of the packages you need.
+
+Manually::
+
+  $ glide in
+  $ glide install
+  $ go build

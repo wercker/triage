@@ -29,8 +29,9 @@ var (
 		},
 	}
 	setMilestonesCommand = cli.Command{
-		Name:  "set-milestones",
-		Usage: "set milestones for a project based on our config",
+		Name:      "set-milestones",
+		Usage:     "set milestones for a project based on our config",
+		ArgsUsage: "[project]",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {
@@ -45,8 +46,9 @@ var (
 		},
 	}
 	createMilestoneCommand = cli.Command{
-		Name:  "create-milestone",
-		Usage: "create milestone for a project based on our config",
+		Name:      "create-milestone",
+		Usage:     "create milestone for a project based on our config",
+		ArgsUsage: "[project]",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {

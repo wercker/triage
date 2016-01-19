@@ -12,8 +12,9 @@ import (
 
 var (
 	showProjectsCommand = cli.Command{
-		Name:  "show-projects",
-		Usage: "output projects for user suitable for use in config",
+		Name:      "show-projects",
+		Usage:     "output projects for user suitable for use in config",
+		ArgsUsage: "[target]",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {

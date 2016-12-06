@@ -13,8 +13,9 @@ import (
 
 var (
 	showLabelsCommand = cli.Command{
-		Name:  "show-labels",
-		Usage: "output labels for a project suitable for use in config",
+		Name:      "show-labels",
+		Usage:     "output labels for a project suitable for use in config",
+		ArgsUsage: "[project]",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {
@@ -29,8 +30,9 @@ var (
 		},
 	}
 	setLabelsCommand = cli.Command{
-		Name:  "set-labels",
-		Usage: "set labels for a project based on our config",
+		Name:      "set-labels",
+		Usage:     "set labels for a project based on our config",
+		ArgsUsage: "[project]",
 		Action: func(c *cli.Context) {
 			opts, err := NewOptions(c)
 			if err != nil {

@@ -240,6 +240,7 @@ ton you're going to want to make specific triage calls.
 An Example Config
 -----------------
 
+Currently, triage only looks for `triage.yml` in the current working directory.
 
 Also happen to show the defaults (besides the `projects` section) that you'll
 get if you just run with it::
